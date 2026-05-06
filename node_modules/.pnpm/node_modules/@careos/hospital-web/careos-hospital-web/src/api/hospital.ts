@@ -1,0 +1,1 @@
+import { apiClient } from './client'; import type { Hospital } from '../types/models'; export const hospitalApi={profile:async()=>{const{data}=await apiClient.get<{hospital:Hospital}>('/hospital/profile');return data.hospital}}

@@ -1,0 +1,5 @@
+import axios,{AxiosError} from 'axios'; import { TOKEN_KEY,useAuthStore } from '../store/authStore'; import type { ApiError } from '../types/models'
+export const apiClient=axios.create({baseURL:import.meta.env.VITE_HOSPITAL_API_URL||'http://localhost:4002',headers:{'Content-Type':'application/json'}})
+apiClient.interceptors.request.use(c=>{const t=useAuthStore.getState().token||localStorage.getItem(TOKEN_KEY); if(t)c.headers.Authorization=`Bearer ${t}`; return c})
+apiClient.interceptors.response.use(r=>r,(e:AxiosError<{message?:string;errors?:unknown}>)=>{if(e.response?.status===401){useAuthStore.getState().clearSession(); if(location.pathname!='/login')location.assign('/login')} return Promise.reject(e)})
+export function parseApiError(e:unknown):ApiError{if(axios.isAxiosError(e))return{status:e.response?.status,message:e.response?.data?.message||e.message||'Request failed',details:e.response?.data?.errors??e.response?.data}; if(e instanceof Error)return{message:e.message}; return{message:'Unexpected error'}}

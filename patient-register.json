@@ -1,0 +1,8 @@
+{
+  "email": "patient@example.com",
+  "password": "Patient@12345",
+  "fullName": "Rahim Uddin",
+  "phone": "+8801712223333",
+  "gender": "MALE",
+  "dateOfBirth": "1998-05-20"
+}

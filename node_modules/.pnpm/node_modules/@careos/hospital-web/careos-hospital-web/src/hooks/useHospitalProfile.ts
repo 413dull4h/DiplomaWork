@@ -1,0 +1,1 @@
+import { useQuery } from '@tanstack/react-query'; import { hospitalApi } from '../api/hospital'; export function useHospitalProfile(){return useQuery({queryKey:['hospital-profile'],queryFn:hospitalApi.profile})}
