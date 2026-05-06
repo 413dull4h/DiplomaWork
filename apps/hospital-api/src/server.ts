@@ -9,6 +9,9 @@ import { hospitalDoctorsRouter } from './routes/hospital-doctors.routes'
 import { hospitalDoctorAvailabilityRouter } from './routes/hospital-doctor-availability.routes'
 import { hospitalAppointmentsRouter } from './routes/hospital-appointments.routes'
 import { hospitalEncountersRouter } from './routes/hospital-encounters.routes'
+import { doctorAuthRouter } from './routes/doctor-auth.routes'
+import { doctorRouter } from './routes/doctor.routes'
+import { hospitalDoctorAccountsRouter } from './routes/hospital-doctor-accounts.routes'
 
 const app = express()
 
@@ -22,10 +25,12 @@ app.get('/health', (_req, res) => {
     timestamp: new Date().toISOString(),
   })
 })
-
 app.use('/hospital/auth', hospitalAuthRouter)
+app.use('/hospital/doctor-auth', doctorAuthRouter)
+app.use('/hospital/doctor', doctorRouter)
 app.use('/hospital/appointments', hospitalAppointmentsRouter)
 app.use('/hospital/doctors', hospitalDoctorsRouter)
+app.use('/hospital', hospitalDoctorAccountsRouter)
 app.use('/hospital', hospitalDoctorAvailabilityRouter)
 app.use('/hospital', hospitalEncountersRouter)
 app.use('/hospital', hospitalRouter)

@@ -14,13 +14,16 @@ enum UserStatus {
   DELETED
 }
 
+
 enum RoleName {
   PATIENT
+  DOCTOR
   HOSPITAL_ADMIN
   HOSPITAL_STAFF
   PLATFORM_ADMIN
   SUPER_ADMIN
 }
+
 
 enum HospitalStatus {
   PENDING
@@ -75,6 +78,7 @@ model User {
 
   userRoles    UserRole[]
   patient      Patient?
+doctor       Doctor?
   orgStaff     OrgStaff[]
   auditLogs    AuditLog[]
 
@@ -216,6 +220,8 @@ model Doctor {
   yearsExperience Int?     @map("years_experience")
   bio             String?
   consultationFee Decimal? @map("consultation_fee")
+userId String? @unique @map("user_id")
+user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   hospitals       HospitalDoctor[]
 appointments Appointment[]

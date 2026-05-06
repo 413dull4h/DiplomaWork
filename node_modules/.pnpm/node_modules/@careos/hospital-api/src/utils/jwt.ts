@@ -6,6 +6,8 @@ export type JwtPayload = {
   email: string
   primaryRole: RoleName
   hospitalId?: string
+  doctorId?: string
+  hospitalDoctorId?: string
 }
 
 export function signAccessToken(payload: JwtPayload) {
