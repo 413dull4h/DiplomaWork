@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { prisma, AppointmentStatus } from '@careos/database'
+import { prisma, AppointmentStatus, NotificationType } from '@careos/database'
 import {
   requireHospitalAuth,
   type AuthenticatedHospitalRequest,
@@ -119,6 +119,26 @@ hospitalEncountersRouter.post(
             appointmentId: appointment.id,
             patientId: appointment.patientId,
             doctorId: appointment.doctorId,
+          },
+        },
+      })
+
+      await prisma.notification.create({
+        data: {
+          recipientUserId: appointment.patient.userId,
+          type: NotificationType.ENCOUNTER_CREATED,
+          title: 'Medical record available',
+          body: 'Your visit note and medical record are now available.',
+          entityType: 'ENCOUNTER',
+          entityId: result.id,
+          metadata: {
+            encounterId: result.id,
+            appointmentId: appointment.id,
+            patientId: appointment.patientId,
+            hospitalId: appointment.hospitalId,
+            doctorId: appointment.doctorId,
+            scheduledStart: appointment.scheduledStart.toISOString(),
+            scheduledEnd: appointment.scheduledEnd.toISOString(),
           },
         },
       })

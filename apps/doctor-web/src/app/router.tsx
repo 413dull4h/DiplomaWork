@@ -11,6 +11,7 @@ import { EditDoctorProfilePage } from '../features/profile/EditDoctorProfilePage
 import { DoctorPatientRecordsPage } from '../features/records/DoctorPatientRecordsPage'
 import { DoctorSchedulePage } from '../features/schedule/DoctorSchedulePage'
 import { DoctorSettingsPage } from '../features/settings/DoctorSettingsPage'
+import { ChatsPage, ChatDetailPage } from '../pages/ChatsPage'
 
 export const router = createBrowserRouter([
   {
@@ -26,11 +27,27 @@ export const router = createBrowserRouter([
     ),
     children: [
       { index: true, element: <Navigate to="/dashboard" replace /> },
+
       { path: 'dashboard', element: <DoctorDashboardPage /> },
+
       { path: 'appointments', element: <DoctorAppointmentsPage /> },
-      { path: 'appointments/:appointmentId', element: <DoctorAppointmentDetailsPage /> },
-      { path: 'appointments/:appointmentId/encounter', element: <CreateDoctorEncounterPage /> },
-      { path: 'patients/:patientId/records', element: <DoctorPatientRecordsPage /> },
+      {
+        path: 'appointments/:appointmentId',
+        element: <DoctorAppointmentDetailsPage />,
+      },
+      {
+        path: 'appointments/:appointmentId/encounter',
+        element: <CreateDoctorEncounterPage />,
+      },
+
+      { path: 'chats', element: <ChatsPage /> },
+      { path: 'chats/:threadId', element: <ChatDetailPage /> },
+
+      {
+        path: 'patients/:patientId/records',
+        element: <DoctorPatientRecordsPage />,
+      },
+
       { path: 'profile', element: <DoctorProfilePage /> },
       { path: 'profile/edit', element: <EditDoctorProfilePage /> },
       { path: 'schedule', element: <DoctorSchedulePage /> },

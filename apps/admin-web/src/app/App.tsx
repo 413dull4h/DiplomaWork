@@ -19,6 +19,7 @@ import { AppointmentsPage } from '@/pages/admin/AppointmentsPage'
 import { AppointmentDetailsPage } from '@/pages/admin/AppointmentDetailsPage'
 import { SettingsPage } from '@/pages/admin/SettingsPage'
 import { AccountPage } from '@/pages/admin/AccountPage'
+import { ReviewsPage } from '../pages/admin/ReviewsPage'
 
 export function App() {
   return <Routes>
@@ -35,6 +36,7 @@ export function App() {
       <Route path="/users/:id" element={<UserDetailsPage />} />
       <Route path="/patients" element={<PatientsPage />} />
       <Route path="/patients/:id" element={<PatientDetailsPage />} />
+	<Route path="/reviews" element={<ReviewsPage />} />
       <Route path="/audit-logs" element={<AuditLogsPage />} />
       <Route path="/audit-logs/:id" element={<AuditLogDetailsPage />} />
       <Route path="/appointments" element={<AppointmentsPage />} />

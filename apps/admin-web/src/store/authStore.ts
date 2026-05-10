@@ -17,6 +17,7 @@ interface AuthStore {
   token: string | null
   user: AdminUser | null
   isAuthenticated: boolean
+avatarUrl?: string | null
   setSession: (token: string, user: AdminUser) => void
   setUser: (user: AdminUser) => void
   clearSession: () => void

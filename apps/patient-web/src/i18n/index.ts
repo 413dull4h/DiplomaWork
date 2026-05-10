@@ -1,5 +1,66 @@
-import i18n from 'i18next';import LanguageDetector from 'i18next-browser-languagedetector';import { initReactI18next } from 'react-i18next';
-import en from './resources/en.json';import ru from './resources/ru.json';import ar from './resources/ar.json';import bn from './resources/bn.json';import zh from './resources/zh.json';import fr from './resources/fr.json';import de from './resources/de.json';import es from './resources/es.json';
-export const supportedLanguages=['en','ru','ar','bn','zh','fr','de','es'] as const;export type SupportedLanguage=typeof supportedLanguages[number];
-i18n.use(LanguageDetector).use(initReactI18next).init({resources:{en:{translation:en},ru:{translation:ru},ar:{translation:ar},bn:{translation:bn},zh:{translation:zh},fr:{translation:fr},de:{translation:de},es:{translation:es}},fallbackLng:'en',supportedLngs:[...supportedLanguages],interpolation:{escapeValue:false},detection:{order:['localStorage','navigator'],caches:['localStorage'],lookupLocalStorage:'careos_patient_lang'}})
-function apply(l:string){const s=supportedLanguages.includes(l as SupportedLanguage)?l:'en';document.documentElement.lang=s;document.documentElement.dir=s==='ar'?'rtl':'ltr'}i18n.on('languageChanged',apply);apply(i18n.language);export default i18n
+import i18n from 'i18next'
+import LanguageDetector from 'i18next-browser-languagedetector'
+import { initReactI18next } from 'react-i18next'
+
+import en from './resources/en.json'
+import ru from './resources/ru.json'
+import ar from './resources/ar.json'
+import bn from './resources/bn.json'
+import zh from './resources/zh.json'
+import fr from './resources/fr.json'
+import de from './resources/de.json'
+import es from './resources/es.json'
+
+export const supportedLanguages = [
+  'en',
+  'ru',
+  'ar',
+  'bn',
+  'zh',
+  'fr',
+  'de',
+  'es',
+] as const
+
+export type SupportedLanguage = (typeof supportedLanguages)[number]
+
+i18n
+  .use(LanguageDetector)
+  .use(initReactI18next)
+  .init({
+    resources: {
+      en: { translation: en },
+      ru: { translation: ru },
+      ar: { translation: ar },
+      bn: { translation: bn },
+      zh: { translation: zh },
+      fr: { translation: fr },
+      de: { translation: de },
+      es: { translation: es },
+    },
+    fallbackLng: 'en',
+    supportedLngs: [...supportedLanguages],
+    interpolation: {
+      escapeValue: false,
+    },
+    detection: {
+      order: ['localStorage', 'navigator'],
+      caches: ['localStorage'],
+      lookupLocalStorage: 'careos_patient_lang',
+    },
+  })
+
+function applyLanguageSettings(language: string) {
+  const safeLanguage = supportedLanguages.includes(language as SupportedLanguage)
+    ? language
+    : 'en'
+
+  document.documentElement.lang = safeLanguage
+  document.documentElement.dir = safeLanguage === 'ar' ? 'rtl' : 'ltr'
+}
+
+i18n.on('languageChanged', applyLanguageSettings)
+
+applyLanguageSettings(i18n.language)
+
+export default i18n

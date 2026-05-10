@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { prisma, AppointmentStatus } from '@careos/database'
+import { prisma, AppointmentStatus, NotificationType } from '@careos/database'
 import {
   requireHospitalAuth,
   type AuthenticatedHospitalRequest,
@@ -14,112 +14,111 @@ const cancelAppointmentSchema = z.object({
   cancellationReason: z.string().optional(),
 })
 
-hospitalAppointmentsRouter.get('/', async (req: AuthenticatedHospitalRequest, res) => {
-  try {
-    const hospitalId = req.user?.hospitalId
-
-    if (!hospitalId) {
-      return res.status(403).json({
-        message: 'No hospital assigned.',
-      })
-    }
-
-    const status = req.query.status ? String(req.query.status) : undefined
-
-    const appointments = await prisma.appointment.findMany({
-      where: {
-        hospitalId,
-        deletedAt: null,
-        status: status as AppointmentStatus | undefined,
-      },
-      include: {
-        patient: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                email: true,
-                phone: true,
-                status: true,
-              },
-            },
-          },
+const appointmentInclude = {
+  patient: {
+    include: {
+      user: {
+        select: {
+          id: true,
+          email: true,
+          phone: true,
+          status: true,
         },
-        doctor: true,
-        department: true,
-        hospitalDoctor: true,
       },
-      orderBy: {
-        scheduledStart: 'asc',
-      },
-    })
+      primaryAddress: true,
+    },
+  },
+  hospital: true,
+  doctor: true,
+  department: true,
+  hospitalDoctor: true,
+  encounter: true,
+  medicalDocuments: true,
+  hospitalReview: true,
+  doctorReview: true,
+  patientVisitFeedback: true,
+  chatThread: true,
+  teleconsultSession: true,
+}
 
-    return res.json({
-      appointments,
-    })
-  } catch (error) {
-    console.error('List hospital appointments error:', error)
+hospitalAppointmentsRouter.get(
+  '/',
+  async (req: AuthenticatedHospitalRequest, res) => {
+    try {
+      const hospitalId = req.user?.hospitalId
 
-    return res.status(500).json({
-      message: 'Something went wrong.',
-    })
-  }
-})
+      if (!hospitalId) {
+        return res.status(403).json({
+          message: 'No hospital assigned.',
+        })
+      }
 
-hospitalAppointmentsRouter.get('/:id', async (req: AuthenticatedHospitalRequest, res) => {
-  try {
-    const hospitalId = req.user?.hospitalId
+      const status = req.query.status ? String(req.query.status) : undefined
 
-    if (!hospitalId) {
-      return res.status(403).json({
-        message: 'No hospital assigned.',
-      })
-    }
-
-    const appointment = await prisma.appointment.findFirst({
-      where: {
-        id: req.params.id,
-        hospitalId,
-        deletedAt: null,
-      },
-      include: {
-        patient: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                email: true,
-                phone: true,
-                status: true,
-              },
-            },
-            primaryAddress: true,
-          },
+      const appointments = await prisma.appointment.findMany({
+        where: {
+          hospitalId,
+          deletedAt: null,
+          status: status as AppointmentStatus | undefined,
         },
-        hospital: true,
-        doctor: true,
-        department: true,
-        hospitalDoctor: true,
-      },
-    })
+        include: appointmentInclude,
+        orderBy: {
+          scheduledStart: 'asc',
+        },
+      })
 
-    if (!appointment) {
-      return res.status(404).json({
-        message: 'Appointment not found.',
+      return res.json({
+        appointments,
+      })
+    } catch (error) {
+      console.error('List hospital appointments error:', error)
+
+      return res.status(500).json({
+        message: 'Something went wrong.',
       })
     }
-
-    return res.json({
-      appointment,
-    })
-  } catch (error) {
-    console.error('Get hospital appointment error:', error)
-
-    return res.status(500).json({
-      message: 'Something went wrong.',
-    })
   }
-})
+)
+
+hospitalAppointmentsRouter.get(
+  '/:id',
+  async (req: AuthenticatedHospitalRequest, res) => {
+    try {
+      const hospitalId = req.user?.hospitalId
+
+      if (!hospitalId) {
+        return res.status(403).json({
+          message: 'No hospital assigned.',
+        })
+      }
+
+      const appointment = await prisma.appointment.findFirst({
+        where: {
+          id: req.params.id,
+          hospitalId,
+          deletedAt: null,
+        },
+        include: appointmentInclude,
+      })
+
+      if (!appointment) {
+        return res.status(404).json({
+          message: 'Appointment not found.',
+        })
+      }
+
+      return res.json({
+        appointment,
+      })
+    } catch (error) {
+      console.error('Get hospital appointment error:', error)
+
+      return res.status(500).json({
+        message: 'Something went wrong.',
+      })
+    }
+  }
+)
 
 hospitalAppointmentsRouter.patch(
   '/:id/confirm',
@@ -160,12 +159,7 @@ hospitalAppointmentsRouter.patch(
         data: {
           status: AppointmentStatus.CONFIRMED,
         },
-        include: {
-          patient: true,
-          doctor: true,
-          department: true,
-          hospital: true,
-        },
+        include: appointmentInclude,
       })
 
       await prisma.auditLog.create({
@@ -178,6 +172,26 @@ hospitalAppointmentsRouter.patch(
             hospitalId,
             patientId: appointment.patientId,
             doctorId: appointment.doctorId,
+          },
+        },
+      })
+
+      await prisma.notification.create({
+        data: {
+          recipientUserId: appointment.patient.userId,
+          type: NotificationType.APPOINTMENT_CONFIRMED,
+          title: 'Appointment confirmed',
+          body: `Your appointment with ${appointment.doctor.fullName} has been confirmed.`,
+          entityType: 'APPOINTMENT',
+          entityId: appointment.id,
+          metadata: {
+            appointmentId: appointment.id,
+            patientId: appointment.patientId,
+            hospitalId: appointment.hospitalId,
+            doctorId: appointment.doctorId,
+            appointmentType: appointment.appointmentType,
+            scheduledStart: appointment.scheduledStart.toISOString(),
+            scheduledEnd: appointment.scheduledEnd.toISOString(),
           },
         },
       })
@@ -248,12 +262,7 @@ hospitalAppointmentsRouter.patch(
           status: AppointmentStatus.CANCELLED,
           cancellationReason: parsed.data.cancellationReason,
         },
-        include: {
-          patient: true,
-          doctor: true,
-          department: true,
-          hospital: true,
-        },
+        include: appointmentInclude,
       })
 
       await prisma.auditLog.create({
@@ -265,7 +274,28 @@ hospitalAppointmentsRouter.patch(
           metadata: {
             hospitalId,
             patientId: appointment.patientId,
+            doctorId: appointment.doctorId,
             reason: parsed.data.cancellationReason,
+          },
+        },
+      })
+
+      await prisma.notification.create({
+        data: {
+          recipientUserId: appointment.patient.userId,
+          type: NotificationType.APPOINTMENT_CANCELLED,
+          title: 'Appointment cancelled',
+          body: `Your appointment with ${appointment.doctor.fullName} was cancelled.`,
+          entityType: 'APPOINTMENT',
+          entityId: appointment.id,
+          metadata: {
+            appointmentId: appointment.id,
+            patientId: appointment.patientId,
+            hospitalId: appointment.hospitalId,
+            doctorId: appointment.doctorId,
+            cancellationReason: appointment.cancellationReason,
+            scheduledStart: appointment.scheduledStart.toISOString(),
+            scheduledEnd: appointment.scheduledEnd.toISOString(),
           },
         },
       })
@@ -326,12 +356,7 @@ hospitalAppointmentsRouter.patch(
         data: {
           status: AppointmentStatus.COMPLETED,
         },
-        include: {
-          patient: true,
-          doctor: true,
-          department: true,
-          hospital: true,
-        },
+        include: appointmentInclude,
       })
 
       await prisma.auditLog.create({
@@ -343,6 +368,26 @@ hospitalAppointmentsRouter.patch(
           metadata: {
             hospitalId,
             patientId: appointment.patientId,
+            doctorId: appointment.doctorId,
+          },
+        },
+      })
+
+      await prisma.notification.create({
+        data: {
+          recipientUserId: appointment.patient.userId,
+          type: NotificationType.APPOINTMENT_COMPLETED,
+          title: 'Appointment completed',
+          body: `Your appointment with ${appointment.doctor.fullName} has been marked as completed.`,
+          entityType: 'APPOINTMENT',
+          entityId: appointment.id,
+          metadata: {
+            appointmentId: appointment.id,
+            patientId: appointment.patientId,
+            hospitalId: appointment.hospitalId,
+            doctorId: appointment.doctorId,
+            scheduledStart: appointment.scheduledStart.toISOString(),
+            scheduledEnd: appointment.scheduledEnd.toISOString(),
           },
         },
       })
@@ -403,12 +448,7 @@ hospitalAppointmentsRouter.patch(
         data: {
           status: AppointmentStatus.NO_SHOW,
         },
-        include: {
-          patient: true,
-          doctor: true,
-          department: true,
-          hospital: true,
-        },
+        include: appointmentInclude,
       })
 
       await prisma.auditLog.create({
@@ -420,6 +460,26 @@ hospitalAppointmentsRouter.patch(
           metadata: {
             hospitalId,
             patientId: appointment.patientId,
+            doctorId: appointment.doctorId,
+          },
+        },
+      })
+
+      await prisma.notification.create({
+        data: {
+          recipientUserId: appointment.patient.userId,
+          type: NotificationType.APPOINTMENT_NO_SHOW,
+          title: 'Appointment marked as no-show',
+          body: `Your appointment with ${appointment.doctor.fullName} was marked as no-show.`,
+          entityType: 'APPOINTMENT',
+          entityId: appointment.id,
+          metadata: {
+            appointmentId: appointment.id,
+            patientId: appointment.patientId,
+            hospitalId: appointment.hospitalId,
+            doctorId: appointment.doctorId,
+            scheduledStart: appointment.scheduledStart.toISOString(),
+            scheduledEnd: appointment.scheduledEnd.toISOString(),
           },
         },
       })

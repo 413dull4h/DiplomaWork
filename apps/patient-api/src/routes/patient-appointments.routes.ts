@@ -7,6 +7,8 @@ import {
   AvailabilityAppointmentType,
   DayOfWeek,
   HospitalStatus,
+  NotificationType,
+  UserStatus,
 } from '@careos/database'
 import {
   requirePatientAuth,
@@ -36,6 +38,24 @@ function buildDateTime(date: string, time: string) {
   return new Date(`${date}T${time}:00.000Z`)
 }
 
+async function getActiveHospitalStaffUserIds(hospitalId: string) {
+  const hospitalStaff = await prisma.orgStaff.findMany({
+    where: {
+      hospitalId,
+      isActive: true,
+      user: {
+        status: UserStatus.ACTIVE,
+        deletedAt: null,
+      },
+    },
+    select: {
+      userId: true,
+    },
+  })
+
+  return hospitalStaff.map((staff) => staff.userId)
+}
+
 const createAppointmentSchema = z.object({
   hospitalDoctorId: z.string().uuid(),
   appointmentType: z.nativeEnum(AppointmentType),
@@ -48,6 +68,21 @@ const createAppointmentSchema = z.object({
 const cancelAppointmentSchema = z.object({
   cancellationReason: z.string().optional(),
 })
+
+const appointmentInclude = {
+  patient: true,
+  hospital: true,
+  doctor: true,
+  department: true,
+  hospitalDoctor: true,
+  encounter: true,
+  medicalDocuments: true,
+  hospitalReview: true,
+  doctorReview: true,
+  patientVisitFeedback: true,
+  chatThread: true,
+  teleconsultSession: true,
+}
 
 patientAppointmentsRouter.post(
   '/appointments',
@@ -70,10 +105,19 @@ patientAppointmentsRouter.post(
         })
       }
 
-      const { hospitalDoctorId, appointmentType, date, startTime, endTime, reason } =
-        parsed.data
+      const {
+        hospitalDoctorId,
+        appointmentType,
+        date,
+        startTime,
+        endTime,
+        reason,
+      } = parsed.data
 
-      if (timeToMinutes(startTime) >= timeToMinutes(endTime)) {
+      const requestedStart = timeToMinutes(startTime)
+      const requestedEnd = timeToMinutes(endTime)
+
+      if (requestedStart >= requestedEnd) {
         return res.status(400).json({
           message: 'startTime must be earlier than endTime.',
         })
@@ -109,44 +153,57 @@ patientAppointmentsRouter.post(
         })
       }
 
-      const availability = await prisma.doctorAvailability.findFirst({
+      const allowedAvailabilityTypes =
+        appointmentType === AppointmentType.IN_PERSON
+          ? [
+              AvailabilityAppointmentType.IN_PERSON,
+              AvailabilityAppointmentType.BOTH,
+            ]
+          : [
+              AvailabilityAppointmentType.TELECONSULT,
+              AvailabilityAppointmentType.BOTH,
+            ]
+
+      const availabilities = await prisma.doctorAvailability.findMany({
         where: {
           hospitalDoctorId,
           dayOfWeek,
           isActive: true,
           deletedAt: null,
           appointmentType: {
-            in:
-              appointmentType === AppointmentType.IN_PERSON
-                ? [
-                    AvailabilityAppointmentType.IN_PERSON,
-                    AvailabilityAppointmentType.BOTH,
-                  ]
-                : [
-                    AvailabilityAppointmentType.TELECONSULT,
-                    AvailabilityAppointmentType.BOTH,
-                  ],
+            in: allowedAvailabilityTypes,
           },
         },
       })
 
-      if (!availability) {
+      if (availabilities.length === 0) {
         return res.status(400).json({
-          message: 'Doctor is not available on this date for this appointment type.',
+          message:
+            'Doctor is not available on this date for this appointment type.',
         })
       }
 
-      const availabilityStart = timeToMinutes(availability.startTime)
-      const availabilityEnd = timeToMinutes(availability.endTime)
-      const requestedStart = timeToMinutes(startTime)
-      const requestedEnd = timeToMinutes(endTime)
       const requestedDuration = requestedEnd - requestedStart
 
-      if (
-        requestedStart < availabilityStart ||
-        requestedEnd > availabilityEnd ||
-        requestedDuration !== availability.slotDurationMinutes
-      ) {
+      const matchingAvailability = availabilities.find((availability) => {
+        const availabilityStart = timeToMinutes(availability.startTime)
+        const availabilityEnd = timeToMinutes(availability.endTime)
+
+        const isWithinAvailability =
+          requestedStart >= availabilityStart && requestedEnd <= availabilityEnd
+
+        const hasCorrectDuration =
+          requestedDuration === availability.slotDurationMinutes
+
+        const isAlignedToSlot =
+          (requestedStart - availabilityStart) %
+            availability.slotDurationMinutes ===
+          0
+
+        return isWithinAvailability && hasCorrectDuration && isAlignedToSlot
+      })
+
+      if (!matchingAvailability) {
         return res.status(400).json({
           message: 'Requested slot does not match doctor availability.',
         })
@@ -155,8 +212,12 @@ patientAppointmentsRouter.post(
       const existingAppointment = await prisma.appointment.findFirst({
         where: {
           hospitalDoctorId,
-          scheduledStart,
-          scheduledEnd,
+          scheduledStart: {
+            lt: scheduledEnd,
+          },
+          scheduledEnd: {
+            gt: scheduledStart,
+          },
           status: {
             in: [AppointmentStatus.REQUESTED, AppointmentStatus.CONFIRMED],
           },
@@ -184,11 +245,7 @@ patientAppointmentsRouter.post(
           status: AppointmentStatus.REQUESTED,
           reason,
         },
-        include: {
-          hospital: true,
-          doctor: true,
-          department: true,
-        },
+        include: appointmentInclude,
       })
 
       await prisma.auditLog.create({
@@ -207,6 +264,32 @@ patientAppointmentsRouter.post(
           },
         },
       })
+
+      const hospitalStaffUserIds = await getActiveHospitalStaffUserIds(
+        appointment.hospitalId
+      )
+
+      if (hospitalStaffUserIds.length > 0) {
+        await prisma.notification.createMany({
+          data: hospitalStaffUserIds.map((userId) => ({
+            recipientUserId: userId,
+            type: NotificationType.APPOINTMENT_BOOKED,
+            title: 'New appointment request',
+            body: `${appointment.patient.fullName} booked an appointment with ${appointment.doctor.fullName}.`,
+            entityType: 'APPOINTMENT',
+            entityId: appointment.id,
+            metadata: {
+              appointmentId: appointment.id,
+              patientId: appointment.patientId,
+              hospitalId: appointment.hospitalId,
+              doctorId: appointment.doctorId,
+              appointmentType: appointment.appointmentType,
+              scheduledStart: appointment.scheduledStart.toISOString(),
+              scheduledEnd: appointment.scheduledEnd.toISOString(),
+            },
+          })),
+        })
+      }
 
       return res.status(201).json({
         message: 'Appointment requested successfully.',
@@ -239,11 +322,7 @@ patientAppointmentsRouter.get(
           patientId,
           deletedAt: null,
         },
-        include: {
-          hospital: true,
-          doctor: true,
-          department: true,
-        },
+        include: appointmentInclude,
         orderBy: {
           scheduledStart: 'desc',
         },
@@ -280,11 +359,7 @@ patientAppointmentsRouter.get(
           patientId,
           deletedAt: null,
         },
-        include: {
-          hospital: true,
-          doctor: true,
-          department: true,
-        },
+        include: appointmentInclude,
       })
 
       if (!appointment) {
@@ -358,11 +433,7 @@ patientAppointmentsRouter.patch(
           status: AppointmentStatus.CANCELLED,
           cancellationReason: parsed.data.cancellationReason,
         },
-        include: {
-          hospital: true,
-          doctor: true,
-          department: true,
-        },
+        include: appointmentInclude,
       })
 
       await prisma.auditLog.create({
@@ -373,10 +444,38 @@ patientAppointmentsRouter.patch(
           entityId: appointment.id,
           metadata: {
             patientId,
+            hospitalId: appointment.hospitalId,
+            doctorId: appointment.doctorId,
             reason: parsed.data.cancellationReason,
           },
         },
       })
+
+      const hospitalStaffUserIds = await getActiveHospitalStaffUserIds(
+        appointment.hospitalId
+      )
+
+      if (hospitalStaffUserIds.length > 0) {
+        await prisma.notification.createMany({
+          data: hospitalStaffUserIds.map((userId) => ({
+            recipientUserId: userId,
+            type: NotificationType.APPOINTMENT_CANCELLED,
+            title: 'Appointment cancelled',
+            body: `${appointment.patient.fullName} cancelled an appointment with ${appointment.doctor.fullName}.`,
+            entityType: 'APPOINTMENT',
+            entityId: appointment.id,
+            metadata: {
+              appointmentId: appointment.id,
+              patientId: appointment.patientId,
+              hospitalId: appointment.hospitalId,
+              doctorId: appointment.doctorId,
+              cancellationReason: appointment.cancellationReason,
+              scheduledStart: appointment.scheduledStart.toISOString(),
+              scheduledEnd: appointment.scheduledEnd.toISOString(),
+            },
+          })),
+        })
+      }
 
       return res.json({
         message: 'Appointment cancelled successfully.',

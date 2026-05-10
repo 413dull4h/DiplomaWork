@@ -47,6 +47,26 @@ export type Address = {
   country?: string | null
 }
 
+export type TeleconsultSession = {
+  id: string
+  appointmentId: string
+  patientId: string
+  hospitalId: string
+  hospitalDoctorId: string
+  doctorId: string
+  providerType: string
+  providerName?: string | null
+  joinUrl: string
+  hostUrl?: string | null
+  status: string
+  createdByUserId?: string | null
+  startedAt?: string | null
+  endedAt?: string | null
+  createdAt: string
+  updatedAt: string
+  deletedAt?: string | null
+}
+
 export type Patient = {
   id: string
   userId?: string | null
@@ -70,6 +90,7 @@ export type Doctor = {
   id: string
   userId?: string | null
   fullName: string
+  profileImageUrl?: string | null
   specialization?: string | null
   licenseNumber?: string | null
   yearsExperience?: number | null
@@ -163,6 +184,7 @@ export type Appointment = {
   patientId: string
   hospitalId: string
   hospitalDoctorId: string
+  teleconsultSession?: TeleconsultSession | null
   doctorId: string
   departmentId?: string | null
   appointmentType: AppointmentType

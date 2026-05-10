@@ -1,6 +1,9 @@
+import fs from 'fs'
+import path from 'path'
 import { Router } from 'express'
 import { z } from 'zod'
 import { prisma, AppointmentStatus } from '@careos/database'
+import { createImageUpload } from '../utils/upload'
 import {
   requireDoctorAuth,
   type AuthenticatedDoctorRequest,
@@ -10,12 +13,14 @@ export const doctorRouter = Router()
 
 doctorRouter.use(requireDoctorAuth)
 
+const avatarUpload = createImageUpload('doctors')
+
 const updateDoctorProfileSchema = z.object({
   fullName: z.string().min(2).optional(),
   specialization: z.string().optional(),
-  yearsExperience: z.number().int().min(0).optional(),
+  yearsExperience: z.coerce.number().int().min(0).optional(),
   bio: z.string().optional(),
-  consultationFee: z.number().min(0).optional(),
+  consultationFee: z.coerce.number().min(0).optional(),
 })
 
 const encounterSchema = z.object({
@@ -25,6 +30,50 @@ const encounterSchema = z.object({
   prescription: z.string().optional(),
   followUpInstructions: z.string().optional(),
 })
+
+const doctorAppointmentInclude = {
+  patient: {
+    include: {
+      user: {
+        select: {
+          id: true,
+          email: true,
+          phone: true,
+          status: true,
+        },
+      },
+      primaryAddress: true,
+    },
+  },
+  hospital: true,
+  doctor: true,
+  department: true,
+  hospitalDoctor: true,
+  encounter: true,
+  medicalDocuments: true,
+  hospitalReview: true,
+  doctorReview: true,
+  patientVisitFeedback: true,
+  chatThread: true,
+  teleconsultSession: true,
+}
+
+function deleteLocalDoctorAvatar(profileImageUrl?: string | null) {
+  if (!profileImageUrl) {
+    return
+  }
+
+  if (!profileImageUrl.startsWith('/uploads/doctors/')) {
+    return
+  }
+
+  const filename = path.basename(profileImageUrl)
+  const filePath = path.join(process.cwd(), 'uploads', 'doctors', filename)
+
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath)
+  }
+}
 
 doctorRouter.get('/dashboard', async (req: AuthenticatedDoctorRequest, res) => {
   try {
@@ -54,12 +103,7 @@ doctorRouter.get('/dashboard', async (req: AuthenticatedDoctorRequest, res) => {
           },
           deletedAt: null,
         },
-        include: {
-          patient: true,
-          hospital: true,
-          department: true,
-          encounter: true,
-        },
+        include: doctorAppointmentInclude,
         orderBy: {
           scheduledStart: 'asc',
         },
@@ -104,12 +148,7 @@ doctorRouter.get('/dashboard', async (req: AuthenticatedDoctorRequest, res) => {
           },
           deletedAt: null,
         },
-        include: {
-          patient: true,
-          hospital: true,
-          department: true,
-          encounter: true,
-        },
+        include: doctorAppointmentInclude,
         orderBy: {
           scheduledStart: 'asc',
         },
@@ -159,25 +198,7 @@ doctorRouter.get('/appointments', async (req: AuthenticatedDoctorRequest, res) =
             : undefined,
         deletedAt: null,
       },
-      include: {
-        patient: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                email: true,
-                phone: true,
-                status: true,
-              },
-            },
-            primaryAddress: true,
-          },
-        },
-        hospital: true,
-        doctor: true,
-        department: true,
-        encounter: true,
-      },
+      include: doctorAppointmentInclude,
       orderBy: {
         scheduledStart: 'asc',
       },
@@ -205,26 +226,7 @@ doctorRouter.get('/appointments/:id', async (req: AuthenticatedDoctorRequest, re
         doctorId: req.user?.doctorId,
         deletedAt: null,
       },
-      include: {
-        patient: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                email: true,
-                phone: true,
-                status: true,
-              },
-            },
-            primaryAddress: true,
-          },
-        },
-        hospital: true,
-        doctor: true,
-        department: true,
-        hospitalDoctor: true,
-        encounter: true,
-      },
+      include: doctorAppointmentInclude,
     })
 
     if (!appointment) {
@@ -272,6 +274,7 @@ doctorRouter.post(
           hospital: true,
           doctor: true,
           department: true,
+          teleconsultSession: true,
         },
       })
 
@@ -386,7 +389,11 @@ doctorRouter.get('/patients/:patientId/records', async (req: AuthenticatedDoctor
         deletedAt: null,
       },
       include: {
-        appointment: true,
+        appointment: {
+          include: {
+            teleconsultSession: true,
+          },
+        },
         patient: true,
         hospital: true,
         doctor: true,
@@ -471,9 +478,17 @@ doctorRouter.patch('/profile', async (req: AuthenticatedDoctorRequest, res) => {
       })
     }
 
+    const doctorId = req.user?.doctorId
+
+    if (!doctorId) {
+      return res.status(403).json({
+        message: 'No doctor assigned.',
+      })
+    }
+
     const doctor = await prisma.doctor.update({
       where: {
-        id: req.user?.doctorId,
+        id: doctorId,
       },
       data: parsed.data,
     })
@@ -503,3 +518,138 @@ doctorRouter.patch('/profile', async (req: AuthenticatedDoctorRequest, res) => {
     })
   }
 })
+
+doctorRouter.post(
+  '/profile/avatar',
+  avatarUpload.single('avatar'),
+  async (req: AuthenticatedDoctorRequest, res) => {
+    try {
+      const doctorId = req.user?.doctorId
+
+      if (!doctorId) {
+        return res.status(403).json({
+          message: 'No doctor assigned.',
+        })
+      }
+
+      if (!req.file) {
+        return res.status(400).json({
+          message: 'Avatar image is required.',
+        })
+      }
+
+      const existingDoctor = await prisma.doctor.findUnique({
+        where: {
+          id: doctorId,
+        },
+      })
+
+      if (!existingDoctor) {
+        return res.status(404).json({
+          message: 'Doctor not found.',
+        })
+      }
+
+      deleteLocalDoctorAvatar(existingDoctor.profileImageUrl)
+
+      const profileImageUrl = `/uploads/doctors/${req.file.filename}`
+
+      const doctor = await prisma.doctor.update({
+        where: {
+          id: doctorId,
+        },
+        data: {
+          profileImageUrl,
+        },
+      })
+
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user?.userId,
+          action: 'UPDATE_DOCTOR_AVATAR',
+          entityType: 'DOCTOR',
+          entityId: doctor.id,
+          metadata: {
+            hospitalId: req.user?.hospitalId,
+            hospitalDoctorId: req.user?.hospitalDoctorId,
+            profileImageUrl,
+          },
+        },
+      })
+
+      return res.json({
+        message: 'Doctor profile picture uploaded successfully.',
+        profileImageUrl,
+        doctor,
+      })
+    } catch (error) {
+      console.error('Upload doctor avatar error:', error)
+
+      return res.status(500).json({
+        message: 'Something went wrong.',
+      })
+    }
+  }
+)
+
+doctorRouter.delete(
+  '/profile/avatar',
+  async (req: AuthenticatedDoctorRequest, res) => {
+    try {
+      const doctorId = req.user?.doctorId
+
+      if (!doctorId) {
+        return res.status(403).json({
+          message: 'No doctor assigned.',
+        })
+      }
+
+      const existingDoctor = await prisma.doctor.findUnique({
+        where: {
+          id: doctorId,
+        },
+      })
+
+      if (!existingDoctor) {
+        return res.status(404).json({
+          message: 'Doctor not found.',
+        })
+      }
+
+      deleteLocalDoctorAvatar(existingDoctor.profileImageUrl)
+
+      const doctor = await prisma.doctor.update({
+        where: {
+          id: doctorId,
+        },
+        data: {
+          profileImageUrl: null,
+        },
+      })
+
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user?.userId,
+          action: 'DELETE_DOCTOR_AVATAR',
+          entityType: 'DOCTOR',
+          entityId: doctor.id,
+          metadata: {
+            hospitalId: req.user?.hospitalId,
+            hospitalDoctorId: req.user?.hospitalDoctorId,
+          },
+        },
+      })
+
+      return res.json({
+        message: 'Doctor profile picture removed successfully.',
+        doctor,
+      })
+    } catch (error) {
+      console.error('Delete doctor avatar error:', error)
+
+      return res.status(500).json({
+        message: 'Something went wrong.',
+      })
+    }
+  }
+)

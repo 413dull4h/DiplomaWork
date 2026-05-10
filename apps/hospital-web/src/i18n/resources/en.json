@@ -19,7 +19,8 @@
     "clinical": "Clinical",
     "system": "System",
     "patientRecords": "Patient Records",
-    "encounters": "Encounters"
+    "encounters": "Encounters",
+"reviews": "Reviews"
   },
   "auth": {
     "signIn": "Hospital sign in",

@@ -136,6 +136,7 @@ adminAuthRouter.get('/me', requireAdminAuth, async (req: AuthenticatedAdminReque
         primaryRole: true,
         lastLoginAt: true,
         createdAt: true,
+avatarUrl: true,
       },
     })
 

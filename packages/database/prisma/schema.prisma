@@ -7,13 +7,54 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum ChatThreadType {
+  APPOINTMENT
+  PATIENT_HOSPITAL
+  PATIENT_DOCTOR
+  SUPPORT
+}
+
+enum ChatMessageSenderRole {
+  PATIENT
+  DOCTOR
+  HOSPITAL_STAFF
+  PLATFORM_ADMIN
+  SYSTEM
+}
+
+enum ChatMessageStatus {
+  SENT
+  READ
+  DELETED
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum MedicalDocumentType {
+  PRESCRIPTION
+  LAB_REPORT
+  IMAGING
+  DISCHARGE_SUMMARY
+  REFERRAL
+  GENERAL_REPORT
+  OTHER
+}
+
+enum MedicalDocumentVisibility {
+  PATIENT_VISIBLE
+  HOSPITAL_ONLY
+}
+
 enum UserStatus {
   ACTIVE
   PENDING
   SUSPENDED
   DELETED
 }
-
 
 enum RoleName {
   PATIENT
@@ -24,6 +65,31 @@ enum RoleName {
   SUPER_ADMIN
 }
 
+enum NotificationType {
+  APPOINTMENT_BOOKED
+  APPOINTMENT_CONFIRMED
+  APPOINTMENT_CANCELLED
+  APPOINTMENT_COMPLETED
+  APPOINTMENT_NO_SHOW
+  ENCOUNTER_CREATED
+  MEDICAL_RECORD_AVAILABLE
+  DOCUMENT_UPLOADED
+  SYSTEM
+  CHAT_MESSAGE
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+  ARCHIVED
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  SMS
+  PUSH
+}
 
 enum HospitalStatus {
   PENDING
@@ -51,6 +117,7 @@ enum OrgStaffRole {
   NURSE
   DOCTOR_COORDINATOR
 }
+
 enum DayOfWeek {
   MONDAY
   TUESDAY
@@ -75,18 +142,161 @@ model User {
   status       UserStatus @default(ACTIVE)
   primaryRole  RoleName   @map("primary_role")
   lastLoginAt  DateTime?  @map("last_login_at")
+  avatarUrl    String?    @map("avatar_url")
 
-  userRoles    UserRole[]
-  patient      Patient?
-doctor       Doctor?
-  orgStaff     OrgStaff[]
-  auditLogs    AuditLog[]
+  userRoles     UserRole[]
+  patient       Patient?
+  doctor        Doctor?
+  orgStaff      OrgStaff[]
+  auditLogs     AuditLog[]
+  notifications Notification[]
 
-  createdAt    DateTime   @default(now()) @map("created_at")
-  updatedAt    DateTime   @updatedAt @map("updated_at")
-  deletedAt    DateTime?  @map("deleted_at")
+  createdChatThreads           ChatThread[]           @relation("ChatThreadCreatedBy")
+  sentChatMessages             ChatMessage[]          @relation("ChatMessageSender")
+  uploadedMedicalDocuments     MedicalDocument[]      @relation("MedicalDocumentUploader")
+  createdPatientVisitFeedbacks PatientVisitFeedback[] @relation("PatientVisitFeedbackCreatedBy")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
   @@map("users")
+}
+
+model HospitalReview {
+  id String @id @default(uuid())
+
+  appointmentId String @unique @map("appointment_id")
+  patientId     String @map("patient_id")
+  hospitalId    String @map("hospital_id")
+
+  overallRating     Int     @map("overall_rating")
+  staffRating       Int?    @map("staff_rating")
+  cleanlinessRating Int?    @map("cleanliness_rating")
+  waitingTimeRating Int?    @map("waiting_time_rating")
+  serviceRating     Int?    @map("service_rating")
+  comment           String?
+
+  status            ReviewStatus @default(PENDING)
+  moderationNote    String?      @map("moderation_note")
+  moderatedByUserId String?      @map("moderated_by_user_id")
+  moderatedAt       DateTime?    @map("moderated_at")
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  patient     Patient     @relation(fields: [patientId], references: [id])
+  hospital    Hospital    @relation(fields: [hospitalId], references: [id])
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([patientId])
+  @@index([hospitalId])
+  @@index([status])
+  @@map("hospital_reviews")
+}
+
+model DoctorReview {
+  id String @id @default(uuid())
+
+  appointmentId    String @unique @map("appointment_id")
+  patientId        String @map("patient_id")
+  hospitalId       String @map("hospital_id")
+  doctorId         String @map("doctor_id")
+  hospitalDoctorId String @map("hospital_doctor_id")
+
+  overallRating         Int      @map("overall_rating")
+  communicationRating   Int?     @map("communication_rating")
+  professionalismRating Int?     @map("professionalism_rating")
+  helpfulnessRating     Int?     @map("helpfulness_rating")
+  wouldRecommend        Boolean? @map("would_recommend")
+  comment               String?
+
+  status            ReviewStatus @default(PENDING)
+  moderationNote    String?      @map("moderation_note")
+  moderatedByUserId String?      @map("moderated_by_user_id")
+  moderatedAt       DateTime?    @map("moderated_at")
+
+  appointment    Appointment    @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  patient        Patient        @relation(fields: [patientId], references: [id])
+  hospital       Hospital       @relation(fields: [hospitalId], references: [id])
+  doctor         Doctor         @relation(fields: [doctorId], references: [id])
+  hospitalDoctor HospitalDoctor @relation(fields: [hospitalDoctorId], references: [id])
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([patientId])
+  @@index([hospitalId])
+  @@index([doctorId])
+  @@index([hospitalDoctorId])
+  @@index([status])
+  @@map("doctor_reviews")
+}
+
+model PatientVisitFeedback {
+  id String @id @default(uuid())
+
+  appointmentId    String  @unique @map("appointment_id")
+  patientId        String  @map("patient_id")
+  hospitalId       String  @map("hospital_id")
+  doctorId         String? @map("doctor_id")
+  hospitalDoctorId String? @map("hospital_doctor_id")
+  createdByUserId  String  @map("created_by_user_id")
+
+  arrivedOnTime        Boolean? @map("arrived_on_time")
+  wasNoShow            Boolean? @map("was_no_show")
+  followedInstructions Boolean? @map("followed_instructions")
+  followUpNeeded       Boolean? @map("follow_up_needed")
+  communicationNote    String?  @map("communication_note")
+  internalNote         String?  @map("internal_note")
+
+  appointment    Appointment     @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  patient        Patient         @relation(fields: [patientId], references: [id])
+  hospital       Hospital        @relation(fields: [hospitalId], references: [id])
+  doctor         Doctor?         @relation(fields: [doctorId], references: [id])
+  hospitalDoctor HospitalDoctor? @relation(fields: [hospitalDoctorId], references: [id])
+  createdByUser  User            @relation("PatientVisitFeedbackCreatedBy", fields: [createdByUserId], references: [id])
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([patientId])
+  @@index([hospitalId])
+  @@index([doctorId])
+  @@index([createdByUserId])
+  @@map("patient_visit_feedback")
+}
+
+model Notification {
+  id String @id @default(uuid())
+
+  recipientUserId String              @map("recipient_user_id")
+  type            NotificationType
+  title           String
+  body            String
+  status          NotificationStatus  @default(UNREAD)
+  channel         NotificationChannel @default(IN_APP)
+
+  entityType String? @map("entity_type")
+  entityId   String? @map("entity_id")
+  metadata   Json?
+
+  readAt DateTime? @map("read_at")
+
+  recipientUser User @relation(fields: [recipientUserId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([recipientUserId])
+  @@index([recipientUserId, status])
+  @@index([type])
+  @@index([entityType, entityId])
+  @@map("notifications")
 }
 
 model Role {
@@ -94,22 +304,22 @@ model Role {
   name        RoleName @unique
   description String?
 
-  userRoles   UserRole[]
+  userRoles UserRole[]
 
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("roles")
 }
 
 model UserRole {
-  id     String @id @default(uuid())
+  id String @id @default(uuid())
 
   userId String @map("user_id")
   roleId String @map("role_id")
 
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -119,7 +329,7 @@ model UserRole {
 }
 
 model Address {
-  id         String  @id @default(uuid())
+  id String @id @default(uuid())
 
   line1      String
   line2      String?
@@ -130,24 +340,25 @@ model Address {
   latitude   Float?
   longitude  Float?
 
-  patients   Patient[]
-  hospitals  Hospital[]
+  patients  Patient[]
+  hospitals Hospital[]
 
-  createdAt  DateTime  @default(now()) @map("created_at")
-  updatedAt  DateTime  @updatedAt @map("updated_at")
-  deletedAt  DateTime? @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
   @@map("addresses")
 }
 
 model Patient {
-  id                    String    @id @default(uuid())
+  id String @id @default(uuid())
 
   userId                String    @unique @map("user_id")
   fullName              String    @map("full_name")
   dateOfBirth           DateTime? @map("date_of_birth")
   gender                String?
   phone                 String?
+  profileImageUrl       String?   @map("profile_image_url")
   primaryAddressId      String?   @map("primary_address_id")
   emergencyContactName  String?   @map("emergency_contact_name")
   emergencyContactPhone String?   @map("emergency_contact_phone")
@@ -155,23 +366,31 @@ model Patient {
   allergies             String?
   currentMedications    String?   @map("current_medications")
 
-  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  primaryAddress        Address?  @relation(fields: [primaryAddressId], references: [id])
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  primaryAddress Address? @relation(fields: [primaryAddressId], references: [id])
 
-  appointments Appointment[]
-encounters             Encounter[]
-  createdAt             DateTime  @default(now()) @map("created_at")
-  updatedAt             DateTime  @updatedAt @map("updated_at")
-  deletedAt             DateTime? @map("deleted_at")
+  appointments        Appointment[]
+  encounters          Encounter[]
+  medicalDocuments    MedicalDocument[]
+  hospitalReviews     HospitalReview[]
+  doctorReviews       DoctorReview[]
+  visitFeedbacks      PatientVisitFeedback[]
+  chatThreads         ChatThread[]
+  teleconsultSessions TeleconsultSession[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
   @@map("patients")
 }
 
 model Hospital {
-  id            String         @id @default(uuid())
+  id String @id @default(uuid())
 
   name          String
   legalName     String?        @map("legal_name")
+  logoUrl       String?        @map("logo_url")
   addressId     String?        @map("address_id")
   contactPhone  String?        @map("contact_phone")
   contactEmail  String?        @map("contact_email")
@@ -179,86 +398,142 @@ model Hospital {
   status        HospitalStatus @default(PENDING)
   timeZone      String?        @map("time_zone")
 
-  address       Address?       @relation(fields: [addressId], references: [id])
-  departments   HospitalDepartment[]
-  doctors       HospitalDoctor[]
-  staff         OrgStaff[]
-appointments Appointment[]
-encounters    Encounter[]
-  createdAt     DateTime       @default(now()) @map("created_at")
-  updatedAt     DateTime       @updatedAt @map("updated_at")
-  deletedAt     DateTime?      @map("deleted_at")
+  address               Address?               @relation(fields: [addressId], references: [id])
+  departments           HospitalDepartment[]
+  doctors               HospitalDoctor[]
+  staff                 OrgStaff[]
+  appointments          Appointment[]
+  encounters            Encounter[]
+  medicalDocuments      MedicalDocument[]
+  hospitalReviews       HospitalReview[]
+  doctorReviews         DoctorReview[]
+  patientVisitFeedbacks PatientVisitFeedback[]
+  chatThreads           ChatThread[]
+  teleconsultSessions   TeleconsultSession[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
   @@map("hospitals")
 }
 
 model HospitalDepartment {
-  id          String    @id @default(uuid())
+  id String @id @default(uuid())
 
-  hospitalId  String    @map("hospital_id")
+  hospitalId  String  @map("hospital_id")
   name        String
   description String?
 
-  hospital    Hospital  @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
-  doctors     HospitalDoctor[]
-appointments Appointment[]
-encounters Encounter[]
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-  deletedAt   DateTime? @map("deleted_at")
+  hospital     Hospital         @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  doctors      HospitalDoctor[]
+  appointments Appointment[]
+  encounters   Encounter[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
   @@unique([hospitalId, name])
   @@map("hospital_departments")
 }
 
 model Doctor {
-  id              String   @id @default(uuid())
+  id String @id @default(uuid())
 
   fullName        String   @map("full_name")
   specialization  String?
+  profileImageUrl String?  @map("profile_image_url")
   licenseNumber   String?  @map("license_number")
   yearsExperience Int?     @map("years_experience")
   bio             String?
   consultationFee Decimal? @map("consultation_fee")
-userId String? @unique @map("user_id")
-user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-  hospitals       HospitalDoctor[]
-appointments Appointment[]
-encounters    Encounter[]
+  userId String? @unique @map("user_id")
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-  deletedAt       DateTime? @map("deleted_at")
+  hospitals             HospitalDoctor[]
+  appointments          Appointment[]
+  encounters            Encounter[]
+  doctorReviews         DoctorReview[]
+  patientVisitFeedbacks PatientVisitFeedback[]
+  chatThreads           ChatThread[]
+  teleconsultSessions   TeleconsultSession[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
   @@map("doctors")
 }
 
 model HospitalDoctor {
-  id           String   @id @default(uuid())
+  id String @id @default(uuid())
 
-  hospitalId   String   @map("hospital_id")
-  doctorId     String   @map("doctor_id")
-  departmentId String?  @map("department_id")
-  isActive     Boolean  @default(true) @map("is_active")
+  hospitalId   String  @map("hospital_id")
+  doctorId     String  @map("doctor_id")
+  departmentId String? @map("department_id")
+  isActive     Boolean @default(true) @map("is_active")
 
-  hospital     Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
-  doctor       Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
-  department   HospitalDepartment? @relation(fields: [departmentId], references: [id])
- 
-  availabilities DoctorAvailability[]
-appointments Appointment[]
-encounters     Encounter[]
+  hospital   Hospital            @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  doctor     Doctor              @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  department HospitalDepartment? @relation(fields: [departmentId], references: [id])
 
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  availabilities        DoctorAvailability[]
+  appointments          Appointment[]
+  encounters            Encounter[]
+  doctorReviews         DoctorReview[]
+  patientVisitFeedbacks PatientVisitFeedback[]
+  chatThreads           ChatThread[]
+  teleconsultSessions   TeleconsultSession[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([hospitalId, doctorId])
   @@map("hospital_doctors")
 }
 
+model TeleconsultSession {
+  id String @id @default(uuid())
+
+  appointmentId    String @unique @map("appointment_id")
+  patientId        String @map("patient_id")
+  hospitalId       String @map("hospital_id")
+  hospitalDoctorId String @map("hospital_doctor_id")
+  doctorId         String @map("doctor_id")
+
+  providerType String  @default("CUSTOM_URL") @map("provider_type")
+  providerName String? @map("provider_name")
+
+  joinUrl String  @map("join_url")
+  hostUrl String? @map("host_url")
+
+  status String @default("READY")
+
+  createdByUserId String?   @map("created_by_user_id")
+  startedAt       DateTime? @map("started_at")
+  endedAt         DateTime? @map("ended_at")
+
+  appointment    Appointment    @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  patient        Patient        @relation(fields: [patientId], references: [id])
+  hospital       Hospital       @relation(fields: [hospitalId], references: [id])
+  hospitalDoctor HospitalDoctor @relation(fields: [hospitalDoctorId], references: [id])
+  doctor         Doctor         @relation(fields: [doctorId], references: [id])
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([appointmentId])
+  @@index([patientId])
+  @@index([hospitalId])
+  @@index([doctorId])
+  @@map("teleconsult_sessions")
+}
+
 model DoctorAvailability {
-  id                  String                      @id @default(uuid())
+  id String @id @default(uuid())
 
   hospitalDoctorId    String                      @map("hospital_doctor_id")
   dayOfWeek           DayOfWeek                   @map("day_of_week")
@@ -268,43 +543,51 @@ model DoctorAvailability {
   appointmentType     AvailabilityAppointmentType @default(BOTH) @map("appointment_type")
   isActive            Boolean                     @default(true) @map("is_active")
 
-  hospitalDoctor      HospitalDoctor              @relation(fields: [hospitalDoctorId], references: [id], onDelete: Cascade)
+  hospitalDoctor HospitalDoctor @relation(fields: [hospitalDoctorId], references: [id], onDelete: Cascade)
 
-  createdAt           DateTime                    @default(now()) @map("created_at")
-  updatedAt           DateTime                    @updatedAt @map("updated_at")
-  deletedAt           DateTime?                   @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
   @@index([hospitalDoctorId, dayOfWeek])
   @@map("doctor_availabilities")
 }
 
 model Appointment {
-  id                String            @id @default(uuid())
+  id String @id @default(uuid())
 
-  patientId         String            @map("patient_id")
-  hospitalId        String            @map("hospital_id")
-  hospitalDoctorId  String            @map("hospital_doctor_id")
-  doctorId          String            @map("doctor_id")
-  departmentId      String?           @map("department_id")
+  patientId        String  @map("patient_id")
+  hospitalId       String  @map("hospital_id")
+  hospitalDoctorId String  @map("hospital_doctor_id")
+  doctorId         String  @map("doctor_id")
+  departmentId     String? @map("department_id")
 
-  appointmentType   AppointmentType   @map("appointment_type")
-  scheduledDate     DateTime          @map("scheduled_date")
-  scheduledStart    DateTime          @map("scheduled_start")
-  scheduledEnd      DateTime          @map("scheduled_end")
+  appointmentType AppointmentType @map("appointment_type")
+  scheduledDate   DateTime        @map("scheduled_date")
+  scheduledStart  DateTime        @map("scheduled_start")
+  scheduledEnd    DateTime        @map("scheduled_end")
 
-  status            AppointmentStatus @default(REQUESTED)
-  reason            String?
-  cancellationReason String?          @map("cancellation_reason")
+  status             AppointmentStatus @default(REQUESTED)
+  reason             String?
+  cancellationReason String?           @map("cancellation_reason")
 
-  patient           Patient           @relation(fields: [patientId], references: [id])
-  hospital          Hospital          @relation(fields: [hospitalId], references: [id])
-  hospitalDoctor    HospitalDoctor    @relation(fields: [hospitalDoctorId], references: [id])
-  doctor            Doctor            @relation(fields: [doctorId], references: [id])
-  department        HospitalDepartment? @relation(fields: [departmentId], references: [id])
-encounter         Encounter?
-  createdAt         DateTime          @default(now()) @map("created_at")
-  updatedAt         DateTime          @updatedAt @map("updated_at")
-  deletedAt         DateTime?         @map("deleted_at")
+  patient        Patient             @relation(fields: [patientId], references: [id])
+  hospital       Hospital            @relation(fields: [hospitalId], references: [id])
+  hospitalDoctor HospitalDoctor      @relation(fields: [hospitalDoctorId], references: [id])
+  doctor         Doctor              @relation(fields: [doctorId], references: [id])
+  department     HospitalDepartment? @relation(fields: [departmentId], references: [id])
+
+  encounter            Encounter?
+  medicalDocuments     MedicalDocument[]
+  hospitalReview       HospitalReview?
+  doctorReview         DoctorReview?
+  patientVisitFeedback PatientVisitFeedback?
+  chatThread           ChatThread?
+  teleconsultSession   TeleconsultSession?
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
   @@index([patientId])
   @@index([hospitalId])
@@ -312,32 +595,99 @@ encounter         Encounter?
   @@index([scheduledStart, scheduledEnd])
   @@map("appointments")
 }
+
+model ChatThread {
+  id String @id @default(uuid())
+
+  type ChatThreadType @default(APPOINTMENT)
+
+  appointmentId    String? @unique @map("appointment_id")
+  patientId        String  @map("patient_id")
+  hospitalId       String  @map("hospital_id")
+  doctorId         String? @map("doctor_id")
+  hospitalDoctorId String? @map("hospital_doctor_id")
+  createdByUserId  String  @map("created_by_user_id")
+
+  subject       String?
+  isClosed      Boolean   @default(false) @map("is_closed")
+  lastMessageAt DateTime? @map("last_message_at")
+
+  appointment    Appointment?    @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  patient        Patient         @relation(fields: [patientId], references: [id])
+  hospital       Hospital        @relation(fields: [hospitalId], references: [id])
+  doctor         Doctor?         @relation(fields: [doctorId], references: [id])
+  hospitalDoctor HospitalDoctor? @relation(fields: [hospitalDoctorId], references: [id])
+  createdByUser  User            @relation("ChatThreadCreatedBy", fields: [createdByUserId], references: [id])
+
+  messages ChatMessage[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([patientId])
+  @@index([hospitalId])
+  @@index([doctorId])
+  @@index([hospitalDoctorId])
+  @@index([appointmentId])
+  @@index([lastMessageAt])
+  @@map("chat_threads")
+}
+
+model ChatMessage {
+  id String @id @default(uuid())
+
+  threadId     String                @map("thread_id")
+  senderUserId String                @map("sender_user_id")
+  senderRole   ChatMessageSenderRole @map("sender_role")
+
+  body   String
+  status ChatMessageStatus @default(SENT)
+
+  readAt DateTime? @map("read_at")
+
+  thread     ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  senderUser User       @relation("ChatMessageSender", fields: [senderUserId], references: [id])
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([threadId])
+  @@index([senderUserId])
+  @@index([threadId, createdAt])
+  @@index([status])
+  @@map("chat_messages")
+}
+
 model Encounter {
-  id                   String              @id @default(uuid())
+  id String @id @default(uuid())
 
-  appointmentId         String              @unique @map("appointment_id")
-  patientId             String              @map("patient_id")
-  hospitalId            String              @map("hospital_id")
-  hospitalDoctorId      String              @map("hospital_doctor_id")
-  doctorId              String              @map("doctor_id")
-  departmentId          String?             @map("department_id")
+  appointmentId    String  @unique @map("appointment_id")
+  patientId        String  @map("patient_id")
+  hospitalId       String  @map("hospital_id")
+  hospitalDoctorId String  @map("hospital_doctor_id")
+  doctorId         String  @map("doctor_id")
+  departmentId     String? @map("department_id")
 
-  chiefComplaint        String?             @map("chief_complaint")
-  notes                 String?
-  diagnosis             String?
-  prescription          String?
-  followUpInstructions  String?             @map("follow_up_instructions")
+  chiefComplaint       String? @map("chief_complaint")
+  notes                String?
+  diagnosis            String?
+  prescription         String?
+  followUpInstructions String? @map("follow_up_instructions")
 
-  appointment           Appointment         @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
-  patient               Patient             @relation(fields: [patientId], references: [id])
-  hospital              Hospital            @relation(fields: [hospitalId], references: [id])
-  hospitalDoctor        HospitalDoctor      @relation(fields: [hospitalDoctorId], references: [id])
-  doctor                Doctor              @relation(fields: [doctorId], references: [id])
-  department            HospitalDepartment? @relation(fields: [departmentId], references: [id])
+  appointment    Appointment         @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  patient        Patient             @relation(fields: [patientId], references: [id])
+  hospital       Hospital            @relation(fields: [hospitalId], references: [id])
+  hospitalDoctor HospitalDoctor      @relation(fields: [hospitalDoctorId], references: [id])
+  doctor         Doctor              @relation(fields: [doctorId], references: [id])
+  department     HospitalDepartment? @relation(fields: [departmentId], references: [id])
 
-  createdAt             DateTime            @default(now()) @map("created_at")
-  updatedAt             DateTime            @updatedAt @map("updated_at")
-  deletedAt             DateTime?           @map("deleted_at")
+  medicalDocuments MedicalDocument[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
   @@index([patientId])
   @@index([hospitalId])
@@ -345,37 +695,78 @@ model Encounter {
   @@index([appointmentId])
   @@map("encounters")
 }
+
+model MedicalDocument {
+  id String @id @default(uuid())
+
+  patientId        String @map("patient_id")
+  hospitalId       String @map("hospital_id")
+  uploadedByUserId String @map("uploaded_by_user_id")
+
+  appointmentId String? @map("appointment_id")
+  encounterId   String? @map("encounter_id")
+
+  title       String
+  description String?
+  type        MedicalDocumentType       @default(OTHER)
+  visibility  MedicalDocumentVisibility @default(PATIENT_VISIBLE)
+
+  fileName     String @map("file_name")
+  originalName String @map("original_name")
+  mimeType     String @map("mime_type")
+  sizeBytes    Int    @map("size_bytes")
+  fileUrl      String @map("file_url")
+
+  patient    Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  hospital   Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  uploadedBy User     @relation("MedicalDocumentUploader", fields: [uploadedByUserId], references: [id])
+
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  encounter   Encounter?   @relation(fields: [encounterId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([patientId])
+  @@index([hospitalId])
+  @@index([appointmentId])
+  @@index([encounterId])
+  @@index([type])
+  @@map("medical_documents")
+}
+
 model OrgStaff {
-  id         String       @id @default(uuid())
+  id String @id @default(uuid())
 
   userId     String       @map("user_id")
   hospitalId String       @map("hospital_id")
   staffRole  OrgStaffRole @map("staff_role")
   isActive   Boolean      @default(true) @map("is_active")
 
-  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  hospital   Hospital     @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hospital Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
 
-  createdAt  DateTime     @default(now()) @map("created_at")
-  updatedAt  DateTime     @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([userId, hospitalId])
   @@map("org_staff")
 }
 
 model AuditLog {
-  id         String   @id @default(uuid())
+  id String @id @default(uuid())
 
-  userId     String?  @map("user_id")
+  userId     String? @map("user_id")
   action     String
-  entityType String   @map("entity_type")
-  entityId   String?  @map("entity_id")
-  ipAddress  String?  @map("ip_address")
+  entityType String  @map("entity_type")
+  entityId   String? @map("entity_id")
+  ipAddress  String? @map("ip_address")
   metadata   Json?
 
-  user       User?    @relation(fields: [userId], references: [id])
+  user User? @relation(fields: [userId], references: [id])
 
-  createdAt  DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@map("audit_logs")
 }

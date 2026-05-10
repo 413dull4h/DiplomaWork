@@ -5,6 +5,7 @@ import {
   AvailabilityAppointmentType,
   DayOfWeek,
   HospitalStatus,
+  ReviewStatus,
 } from '@careos/database'
 import {
   requirePatientAuth,
@@ -45,6 +46,98 @@ function buildDateTime(date: string, time: string) {
   return new Date(`${date}T${time}:00.000Z`)
 }
 
+function roundRating(value: number | null | undefined) {
+  if (typeof value !== 'number') {
+    return null
+  }
+
+  return Number(value.toFixed(1))
+}
+
+async function getHospitalRatingStats(hospitalId: string) {
+  const stats = await prisma.hospitalReview.aggregate({
+    where: {
+      hospitalId,
+      status: ReviewStatus.APPROVED,
+      deletedAt: null,
+    },
+    _avg: {
+      overallRating: true,
+      staffRating: true,
+      cleanlinessRating: true,
+      waitingTimeRating: true,
+      serviceRating: true,
+    },
+    _count: {
+      _all: true,
+    },
+  })
+
+  return {
+    averageRating: roundRating(stats._avg.overallRating),
+    reviewCount: stats._count._all,
+    averageBreakdown: {
+      staffRating: roundRating(stats._avg.staffRating),
+      cleanlinessRating: roundRating(stats._avg.cleanlinessRating),
+      waitingTimeRating: roundRating(stats._avg.waitingTimeRating),
+      serviceRating: roundRating(stats._avg.serviceRating),
+    },
+  }
+}
+
+async function getDoctorRatingStats({
+  hospitalId,
+  doctorId,
+  hospitalDoctorId,
+}: {
+  hospitalId: string
+  doctorId: string
+  hospitalDoctorId: string
+}) {
+  const [stats, wouldRecommendCount] = await Promise.all([
+    prisma.doctorReview.aggregate({
+      where: {
+        hospitalId,
+        doctorId,
+        hospitalDoctorId,
+        status: ReviewStatus.APPROVED,
+        deletedAt: null,
+      },
+      _avg: {
+        overallRating: true,
+        communicationRating: true,
+        professionalismRating: true,
+        helpfulnessRating: true,
+      },
+      _count: {
+        _all: true,
+      },
+    }),
+
+    prisma.doctorReview.count({
+      where: {
+        hospitalId,
+        doctorId,
+        hospitalDoctorId,
+        status: ReviewStatus.APPROVED,
+        wouldRecommend: true,
+        deletedAt: null,
+      },
+    }),
+  ])
+
+  return {
+    averageRating: roundRating(stats._avg.overallRating),
+    reviewCount: stats._count._all,
+    wouldRecommendCount,
+    averageBreakdown: {
+      communicationRating: roundRating(stats._avg.communicationRating),
+      professionalismRating: roundRating(stats._avg.professionalismRating),
+      helpfulnessRating: roundRating(stats._avg.helpfulnessRating),
+    },
+  }
+}
+
 patientDiscoveryRouter.get('/hospitals', async (_req, res) => {
   try {
     const hospitals = await prisma.hospital.findMany({
@@ -68,8 +161,21 @@ patientDiscoveryRouter.get('/hospitals', async (_req, res) => {
       },
     })
 
+    const hospitalsWithRatings = await Promise.all(
+      hospitals.map(async (hospital) => {
+        const rating = await getHospitalRatingStats(hospital.id)
+
+        return {
+          ...hospital,
+          averageRating: rating.averageRating,
+          reviewCount: rating.reviewCount,
+          rating,
+        }
+      })
+    )
+
     return res.json({
-      hospitals,
+      hospitals: hospitalsWithRatings,
     })
   } catch (error) {
     console.error('Patient list hospitals error:', error)
@@ -127,9 +233,41 @@ patientDiscoveryRouter.get('/hospitals/:hospitalId/doctors', async (req, res) =>
       },
     })
 
+    const hospitalRating = await getHospitalRatingStats(hospital.id)
+
+    const doctorsWithRatings = await Promise.all(
+      doctors.map(async (hospitalDoctor) => {
+        const rating = await getDoctorRatingStats({
+          hospitalId: hospitalDoctor.hospitalId,
+          doctorId: hospitalDoctor.doctorId,
+          hospitalDoctorId: hospitalDoctor.id,
+        })
+
+        return {
+          ...hospitalDoctor,
+          averageRating: rating.averageRating,
+          reviewCount: rating.reviewCount,
+          wouldRecommendCount: rating.wouldRecommendCount,
+          rating,
+          doctor: {
+            ...hospitalDoctor.doctor,
+            averageRating: rating.averageRating,
+            reviewCount: rating.reviewCount,
+            wouldRecommendCount: rating.wouldRecommendCount,
+            rating,
+          },
+        }
+      })
+    )
+
     return res.json({
-      hospital,
-      doctors,
+      hospital: {
+        ...hospital,
+        averageRating: hospitalRating.averageRating,
+        reviewCount: hospitalRating.reviewCount,
+        rating: hospitalRating,
+      },
+      doctors: doctorsWithRatings,
     })
   } catch (error) {
     console.error('Patient list hospital doctors error:', error)
@@ -197,13 +335,13 @@ patientDiscoveryRouter.get(
             in:
               appointmentType === 'IN_PERSON'
                 ? [
-                    AvailabilityAppointmentType.IN_PERSON,
-                    AvailabilityAppointmentType.BOTH,
-                  ]
+                  AvailabilityAppointmentType.IN_PERSON,
+                  AvailabilityAppointmentType.BOTH,
+                ]
                 : [
-                    AvailabilityAppointmentType.TELECONSULT,
-                    AvailabilityAppointmentType.BOTH,
-                  ],
+                  AvailabilityAppointmentType.TELECONSULT,
+                  AvailabilityAppointmentType.BOTH,
+                ],
           },
         },
         orderBy: {
@@ -278,6 +416,14 @@ patientDiscoveryRouter.get(
         return generatedSlots
       })
 
+      const doctorRating = await getDoctorRatingStats({
+        hospitalId: hospitalDoctor.hospitalId,
+        doctorId: hospitalDoctor.doctorId,
+        hospitalDoctorId: hospitalDoctor.id,
+      })
+
+      const hospitalRating = await getHospitalRatingStats(hospitalDoctor.hospitalId)
+
       return res.json({
         doctor: {
           hospitalDoctorId: hospitalDoctor.id,
@@ -285,10 +431,17 @@ patientDiscoveryRouter.get(
           fullName: hospitalDoctor.doctor.fullName,
           specialization: hospitalDoctor.doctor.specialization,
           consultationFee: hospitalDoctor.doctor.consultationFee,
+          averageRating: doctorRating.averageRating,
+          reviewCount: doctorRating.reviewCount,
+          wouldRecommendCount: doctorRating.wouldRecommendCount,
+          rating: doctorRating,
         },
         hospital: {
           id: hospitalDoctor.hospital.id,
           name: hospitalDoctor.hospital.name,
+          averageRating: hospitalRating.averageRating,
+          reviewCount: hospitalRating.reviewCount,
+          rating: hospitalRating,
         },
         department: hospitalDoctor.department,
         date,
