@@ -68,6 +68,7 @@ const groups = [
     items: [
       ['/dashboard', 'nav.dashboard', LayoutDashboard],
       ['/profile', 'nav.profile', Building2],
+      ['/locations', 'nav.locations', Building2],
     ],
   },
   {
@@ -96,10 +97,12 @@ const groups = [
   },
 ] as const
 
+
 function getNavLabel(t: ReturnType<typeof useTranslation>['t'], key: string) {
   const fallback: Record<string, string> = {
     'nav.dashboard': 'Dashboard',
     'nav.profile': 'Profile',
+    'nav.locations': 'Locations',
     'nav.departments': 'Departments',
     'nav.doctors': 'Doctors',
     'nav.appointments': 'Appointments',

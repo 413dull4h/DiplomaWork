@@ -31,6 +31,7 @@ import {
   SettingsPage,
   TeleconsultPage,
 } from '../pages/hospital/HospitalPages'
+import { LocationsPage } from '../pages/hospital/HospitalLocationsPage'
 
 function AppRoutes() {
   const { isRestoring } = useHospitalSession()
@@ -61,6 +62,8 @@ function AppRoutes() {
 
         <Route path="profile" element={<ProfilePage />} />
 
+        <Route path="locations" element={<LocationsPage />} />
+
         <Route path="departments" element={<DepartmentsPage />} />
         <Route path="departments/new" element={<CreateDepartmentPage />} />
 
@@ -74,7 +77,10 @@ function AppRoutes() {
 
         <Route path="appointments" element={<AppointmentsPage />} />
         <Route path="appointments/:id" element={<AppointmentDetailsPage />} />
-        <Route path="appointments/:id/encounter" element={<CreateEncounterPage />} />
+        <Route
+          path="appointments/:id/encounter"
+          element={<CreateEncounterPage />}
+        />
 
         <Route path="encounters/:id" element={<EncounterDetailsPage />} />
         <Route path="encounters/:id/edit" element={<EditEncounterPage />} />

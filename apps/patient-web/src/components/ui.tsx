@@ -371,149 +371,120 @@ function RatingPill({
   )
 }
 
-export function HospitalCard({ h }: { h: Hospital }) {
-  const { t } = useTranslation()
-  const hospitalWithRating = h as Hospital & {
-    averageRating?: number | null
-    reviewCount?: number | null
-    rating?: {
-      averageRating?: number | null
-      reviewCount?: number | null
-    }
-  }
-
-  const averageRating =
-    hospitalWithRating.averageRating ?? hospitalWithRating.rating?.averageRating ?? null
-
-  const reviewCount =
-    hospitalWithRating.reviewCount ?? hospitalWithRating.rating?.reviewCount ?? 0
-
+export function HospitalCard({ h }: { h: any }) {
   return (
-    <Card className="flex h-full flex-col justify-between gap-4">
-      <div>
-        <div className="flex justify-between gap-3">
-          <div>
-            <h3 className="text-lg font-bold text-slate-950 dark:text-white">
-              {h.name}
-            </h3>
+    <Card className="flex h-auto min-h-0 flex-col">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-xl font-black text-slate-950 dark:text-white">
+            {h.name}
+          </h3>
 
-            <p className="text-sm text-slate-500">{h.legalName}</p>
-          </div>
-
-          <Badge value={h.status} />
+          <p className="mt-1 text-sm text-slate-500">
+            {h.legalName || '—'}
+          </p>
         </div>
 
-        <RatingPill averageRating={averageRating} reviewCount={reviewCount} />
+        <Badge value={h.status} />
+      </div>
 
-        <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
-          {addr(h.address)}
-        </p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {typeof h.averageRating === 'number' ? (
+          <span className="rounded-full bg-amber-500/15 px-3 py-1 text-xs font-black text-amber-700 dark:text-amber-300">
+            ⭐ {h.averageRating} / 5
+          </span>
+        ) : null}
 
-        <p className="mt-2 text-sm text-slate-500">
-          {h.contactEmail || '—'} · {h.contactPhone || '—'}
-        </p>
+        <span className="rounded-full bg-slate-500/15 px-3 py-1 text-xs font-black text-slate-600 dark:text-slate-300">
+          {h.reviewCount || 0} review{h.reviewCount === 1 ? '' : 's'}
+        </span>
+      </div>
 
+      <p className="mt-4 text-sm text-slate-700 dark:text-slate-300">
+        {addr(h.address)}
+      </p>
+
+      <p className="mt-3 text-sm text-slate-500">
+        {h.contactEmail || '—'} · {h.contactPhone || '—'}
+      </p>
+
+      {h.departments?.length ? (
         <div className="mt-4 flex flex-wrap gap-2">
-          {(h.departments || []).slice(0, 5).map((d) => (
+          {h.departments.slice(0, 5).map((department: any) => (
             <span
-              key={d.id}
-              className="rounded-full bg-sky-100 px-2 py-1 text-xs font-semibold text-sky-700"
+              key={department.id}
+              className="rounded-full bg-sky-100 px-3 py-1 text-xs font-bold text-sky-700 dark:bg-sky-500/15 dark:text-sky-300"
             >
-              {d.name}
+              {department.name}
             </span>
           ))}
         </div>
-      </div>
+      ) : null}
 
-      <Link to={`/app/hospitals/${h.id}/doctors`}>
-        <Button className="w-full">{t('hospital.viewDoctors')}</Button>
+      <Link to={`/app/hospitals/${h.id}`} className="mt-5 block">
+        <Button className="w-full">View doctors</Button>
       </Link>
     </Card>
   )
 }
 
-export function DoctorCard({ d }: { d: HospitalDoctor }) {
-  const { t } = useTranslation()
-
-  const hospitalDoctorWithRating = d as HospitalDoctor & {
-    averageRating?: number | null
-    reviewCount?: number | null
-    wouldRecommendCount?: number | null
-    rating?: {
-      averageRating?: number | null
-      reviewCount?: number | null
-      wouldRecommendCount?: number | null
-    }
-  }
-
-  const doctorWithRating = d.doctor as HospitalDoctor['doctor'] & {
-    averageRating?: number | null
-    reviewCount?: number | null
-    wouldRecommendCount?: number | null
-    rating?: {
-      averageRating?: number | null
-      reviewCount?: number | null
-      wouldRecommendCount?: number | null
-    }
-  }
-
-  const averageRating =
-    hospitalDoctorWithRating.averageRating ??
-    hospitalDoctorWithRating.rating?.averageRating ??
-    doctorWithRating.averageRating ??
-    doctorWithRating.rating?.averageRating ??
-    null
-
-  const reviewCount =
-    hospitalDoctorWithRating.reviewCount ??
-    hospitalDoctorWithRating.rating?.reviewCount ??
-    doctorWithRating.reviewCount ??
-    doctorWithRating.rating?.reviewCount ??
-    0
-
-  const wouldRecommendCount =
-    hospitalDoctorWithRating.wouldRecommendCount ??
-    hospitalDoctorWithRating.rating?.wouldRecommendCount ??
-    doctorWithRating.wouldRecommendCount ??
-    doctorWithRating.rating?.wouldRecommendCount ??
-    0
+export function DoctorCard({ d }: { d: any }) {
+  const doctor = d.doctor || d
 
   return (
-    <Card className="flex h-full flex-col justify-between gap-4">
+    <Card className="flex h-auto min-h-0 flex-col">
       <div>
-        <h3 className="text-lg font-bold text-slate-950 dark:text-white">
-          {d.doctor.fullName}
+        <h3 className="text-xl font-black text-slate-950 dark:text-white">
+          {doctor.fullName}
         </h3>
 
-        <p className="text-sm font-medium text-sky-700">
-          {d.doctor.specialization || '—'}
-        </p>
-
-        <RatingPill
-          averageRating={averageRating}
-          reviewCount={reviewCount}
-          wouldRecommendCount={wouldRecommendCount}
-        />
-
-        <p className="mt-3 text-sm text-slate-500">
-          {d.department?.name || '—'} · {t('hospital.fee')}:{' '}
-          {d.doctor.consultationFee ?? '—'}
-        </p>
-
-        <p className="mt-2 line-clamp-3 text-sm text-slate-600 dark:text-slate-300">
-          {d.doctor.bio || ''}
+        <p className="mt-1 text-sm font-bold text-sky-600 dark:text-sky-400">
+          {doctor.specialization || '—'}
         </p>
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="mt-4 flex flex-wrap gap-2">
+        {typeof d.averageRating === 'number' ? (
+          <span className="rounded-full bg-amber-500/15 px-3 py-1 text-xs font-black text-amber-700 dark:text-amber-300">
+            ⭐ {d.averageRating} / 5
+          </span>
+        ) : (
+          <span className="rounded-full bg-amber-500/15 px-3 py-1 text-xs font-black text-amber-700 dark:text-amber-300">
+            ⭐ No rating yet
+          </span>
+        )}
+
+        <span className="rounded-full bg-slate-500/15 px-3 py-1 text-xs font-black text-slate-600 dark:text-slate-300">
+          {d.reviewCount || 0} review{d.reviewCount === 1 ? '' : 's'}
+        </span>
+
+        {d.wouldRecommendCount ? (
+          <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-black text-emerald-700 dark:text-emerald-300">
+            {d.wouldRecommendCount} recommend
+          </span>
+        ) : null}
+      </div>
+
+      <p className="mt-4 text-sm text-slate-500">
+        {d.department?.name || 'No department'} · Consultation fee:{' '}
+        {doctor.consultationFee || '—'}
+      </p>
+
+      {doctor.bio ? (
+        <p className="mt-3 line-clamp-3 text-sm text-slate-700 dark:text-slate-300">
+          {doctor.bio}
+        </p>
+      ) : null}
+
+      <div className="mt-5 grid grid-cols-2 gap-2">
         <Link to={`/app/doctors/${d.id}/slots`}>
           <Button variant="secondary" className="w-full">
-            {t('hospital.viewSlots')}
+            View slots
           </Button>
         </Link>
 
         <Link to={`/app/book/${d.id}`}>
-          <Button className="w-full">{t('hospital.book')}</Button>
+          <Button className="w-full">Book</Button>
         </Link>
       </div>
     </Card>

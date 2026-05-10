@@ -4,7 +4,9 @@ import { useTranslation } from 'react-i18next'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Camera, Trash2, Upload } from 'lucide-react'
+import { Building2, Camera, MapPin, Navigation, Trash2, Upload } from 'lucide-react'
+import { divIcon } from 'leaflet'
+import { MapContainer, Marker, Popup, TileLayer } from 'react-leaflet'
 import { ReviewPanel } from '../components/reviews/ReviewPanel'
 import { useCreateAppointmentChatThread } from '../hooks/useChats'
 import { usePatientAuthStore } from '../store/authStore'
@@ -71,6 +73,295 @@ function openExternalUrl(url?: string | null) {
     }
 
     window.open(url, '_blank', 'noopener,noreferrer')
+}
+
+const hospitalMarkerIcon = divIcon({
+    className: '',
+    html: `
+      <div style="
+        width: 28px;
+        height: 28px;
+        border-radius: 9999px;
+        background: #0284c7;
+        border: 4px solid white;
+        box-shadow: 0 12px 30px rgba(2,132,199,.35);
+      "></div>
+    `,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+})
+
+function getLocationAddress(location?: any) {
+    return location?.address || null
+}
+
+function getLocationCoords(location?: any) {
+    const address = getLocationAddress(location)
+
+    const latitude =
+        typeof address?.latitude === 'string'
+            ? Number(address.latitude)
+            : address?.latitude
+
+    const longitude =
+        typeof address?.longitude === 'string'
+            ? Number(address.longitude)
+            : address?.longitude
+
+    if (
+        typeof latitude !== 'number' ||
+        typeof longitude !== 'number' ||
+        Number.isNaN(latitude) ||
+        Number.isNaN(longitude)
+    ) {
+        return null
+    }
+
+    return {
+        latitude,
+        longitude,
+    }
+}
+
+function getMapSearchUrl(location?: any) {
+    const coords = getLocationCoords(location)
+
+    if (coords) {
+        return `https://www.google.com/maps/search/?api=1&query=${coords.latitude},${coords.longitude}`
+    }
+
+    const address = addr(getLocationAddress(location))
+
+    if (!address || address === '—') {
+        return null
+    }
+
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`
+}
+
+function getDirectionsUrl(location?: any) {
+    const coords = getLocationCoords(location)
+
+    if (coords) {
+        return `https://www.google.com/maps/dir/?api=1&destination=${coords.latitude},${coords.longitude}`
+    }
+
+    const address = addr(getLocationAddress(location))
+
+    if (!address || address === '—') {
+        return null
+    }
+
+    return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`
+}
+
+function LocationMiniMap({ location }: { location?: any }) {
+    const coords = getLocationCoords(location)
+
+    if (!coords) {
+        return (
+            <div className="grid min-h-[180px] place-items-center rounded-3xl border border-dashed border-slate-300 bg-white/40 p-5 text-center text-sm text-slate-500 dark:border-white/10 dark:bg-white/5">
+                Map coordinates are not available for this location.
+            </div>
+        )
+    }
+
+    return (
+        <div className="overflow-hidden rounded-3xl border border-white/40 shadow-sm dark:border-white/10">
+            <MapContainer
+                key={`${location?.id || 'location'}-${coords.latitude}-${coords.longitude}`}
+                center={[coords.latitude, coords.longitude]}
+                zoom={14}
+                scrollWheelZoom={false}
+                zoomControl={false}
+                className="h-[220px] w-full"
+            >
+                <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+
+                <Marker
+                    position={[coords.latitude, coords.longitude]}
+                    icon={hospitalMarkerIcon}
+                >
+                    <Popup>
+                        <b>{location?.name || 'Hospital location'}</b>
+                        <br />
+                        {addr(location?.address)}
+                    </Popup>
+                </Marker>
+            </MapContainer>
+        </div>
+    )
+}
+
+function LocationActions({ location }: { location?: any }) {
+    const mapUrl = getMapSearchUrl(location)
+    const directionsUrl = getDirectionsUrl(location)
+
+    return (
+        <div className="flex flex-wrap gap-2">
+            <Button
+                variant="secondary"
+                disabled={!mapUrl}
+                onClick={() => openExternalUrl(mapUrl)}
+            >
+                <MapPin className="h-4 w-4" /> Open Map
+            </Button>
+
+            <Button
+                variant="secondary"
+                disabled={!directionsUrl}
+                onClick={() => openExternalUrl(directionsUrl)}
+            >
+                <Navigation className="h-4 w-4" /> Get Directions
+            </Button>
+        </div>
+    )
+}
+
+function LocationCard({ location }: { location: any }) {
+    const departments = location?.departments || []
+    const doctors = location?.doctors || []
+
+    return (
+        <Card>
+            <div className="flex flex-col gap-4">
+                <div className="flex items-start justify-between gap-3">
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <Building2 className="h-5 w-5 text-sky-600" />
+                            <h3 className="text-lg font-black dark:text-white">
+                                {location.name}
+                            </h3>
+                        </div>
+
+                        <p className="mt-1 text-sm text-slate-500">
+                            {addr(location.address)}
+                        </p>
+
+                        {location.description ? (
+                            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                                {location.description}
+                            </p>
+                        ) : null}
+                    </div>
+
+                    {location.isMain ? <Badge value="MAIN" /> : null}
+                </div>
+
+                <LocationMiniMap location={location} />
+
+                <div className="grid gap-3 md:grid-cols-2">
+                    <div className="rounded-3xl bg-white/50 p-4 dark:bg-white/5">
+                        <p className="text-xs font-black uppercase tracking-wide text-slate-500">
+                            Departments
+                        </p>
+
+                        <p className="mt-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                            {departments.length
+                                ? departments.map((item: any) => item.name).join(', ')
+                                : 'No departments assigned yet'}
+                        </p>
+                    </div>
+
+                    <div className="rounded-3xl bg-white/50 p-4 dark:bg-white/5">
+                        <p className="text-xs font-black uppercase tracking-wide text-slate-500">
+                            Doctors
+                        </p>
+
+                        <p className="mt-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                            {doctors.length
+                                ? doctors.map((item: any) => item.doctor?.fullName).filter(Boolean).join(', ')
+                                : 'No doctors assigned yet'}
+                        </p>
+                    </div>
+                </div>
+
+                <LocationActions location={location} />
+            </div>
+        </Card>
+    )
+}
+
+function HospitalLocationsPreview({ locations }: { locations?: any[] }) {
+    const visibleLocations = locations || []
+
+    if (!visibleLocations.length) {
+        return null
+    }
+
+    return (
+        <Card className="space-y-3">
+            <p className="text-xs font-black uppercase tracking-wide text-slate-500">
+                Locations / Buildings
+            </p>
+
+            {visibleLocations.slice(0, 2).map((location) => (
+                <div
+                    key={location.id}
+                    className="rounded-3xl border border-white/40 bg-white/50 p-4 dark:border-white/10 dark:bg-white/5"
+                >
+                    <div className="flex items-start justify-between gap-3">
+                        <div>
+                            <p className="font-bold dark:text-white">
+                                {location.name}
+                            </p>
+
+                            <p className="mt-1 text-sm text-slate-500">
+                                {addr(location.address)}
+                            </p>
+                        </div>
+
+                        {location.isMain ? <Badge value="MAIN" /> : null}
+                    </div>
+
+                    <div className="mt-3">
+                        <LocationActions location={location} />
+                    </div>
+                </div>
+            ))}
+        </Card>
+    )
+}
+
+function AppointmentLocationPanel({ appointment }: { appointment: any }) {
+    const location =
+        appointment?.location ||
+        appointment?.hospitalDoctor?.location ||
+        appointment?.department?.location ||
+        null
+
+    if (!location || appointment?.appointmentType === 'TELECONSULT') {
+        return null
+    }
+
+    return (
+        <div className="mt-6 rounded-3xl border border-emerald-200 bg-emerald-50 p-5 dark:border-emerald-500/30 dark:bg-emerald-500/10">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                    <p className="text-xs font-black uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+                        Visit location
+                    </p>
+
+                    <h3 className="mt-1 text-lg font-black text-slate-950 dark:text-white">
+                        {location.name}
+                    </h3>
+
+                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                        {addr(location.address)}
+                    </p>
+                </div>
+
+                <LocationActions location={location} />
+            </div>
+
+            <div className="mt-4">
+                <LocationMiniMap location={location} />
+            </div>
+        </div>
+    )
 }
 
 const loginSchema = z.object({
@@ -970,7 +1261,10 @@ export function Hospitals() {
             ) : list.length ? (
                 <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
                     {list.map((hospital) => (
-                        <HospitalCard key={hospital.id} h={hospital} />
+                        <div key={hospital.id} className="space-y-4">
+                            <HospitalCard h={hospital} />
+                            <HospitalLocationsPreview locations={(hospital as any).locations} />
+                        </div>
                     ))}
                 </div>
             ) : (
@@ -998,12 +1292,15 @@ export function HospitalDetails() {
         JSON.stringify(doctor).toLowerCase().includes(s.toLowerCase())
     )
 
+    const locations = (q.data.hospital as any).locations || []
+
     return (
         <Page title={q.data.hospital.name} subtitle={addr(q.data.hospital.address)}>
             <Card className="mb-6">
-                <div className="flex justify-between">
+                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                     <div>
                         <b>{q.data.hospital.legalName || q.data.hospital.name}</b>
+
                         <p className="text-sm text-slate-500">
                             {q.data.hospital.contactEmail} · {q.data.hospital.contactPhone}
                         </p>
@@ -1012,6 +1309,26 @@ export function HospitalDetails() {
                     <Badge value={q.data.hospital.status} />
                 </div>
             </Card>
+
+            {locations.length ? (
+                <section className="mb-8 space-y-4">
+                    <div>
+                        <h2 className="text-xl font-black dark:text-white">
+                            Locations & Buildings
+                        </h2>
+
+                        <p className="mt-1 text-sm text-slate-500">
+                            Choose the correct hospital building before booking an in-person appointment.
+                        </p>
+                    </div>
+
+                    <div className="grid gap-5 lg:grid-cols-2">
+                        {locations.map((location: any) => (
+                            <LocationCard key={location.id} location={location} />
+                        ))}
+                    </div>
+                </section>
+            ) : null}
 
             <Input
                 placeholder={t('search')}
@@ -1023,7 +1340,29 @@ export function HospitalDetails() {
             {doctors.length ? (
                 <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
                     {doctors.map((doctor) => (
-                        <DoctorCard key={doctor.id} d={doctor} />
+                        <div key={doctor.id} className="space-y-3">
+                            <DoctorCard d={doctor} />
+
+                            {(doctor as any).effectiveLocation ? (
+                                <Card>
+                                    <p className="text-xs font-black uppercase tracking-wide text-slate-500">
+                                        Doctor location
+                                    </p>
+
+                                    <p className="mt-2 font-bold dark:text-white">
+                                        {(doctor as any).effectiveLocation.name}
+                                    </p>
+
+                                    <p className="mt-1 text-sm text-slate-500">
+                                        {addr((doctor as any).effectiveLocation.address)}
+                                    </p>
+
+                                    <div className="mt-3">
+                                        <LocationActions location={(doctor as any).effectiveLocation} />
+                                    </div>
+                                </Card>
+                            ) : null}
+                        </div>
                     ))}
                 </div>
             ) : (
@@ -1083,10 +1422,38 @@ export function DoctorSlots() {
             ) : q.isError ? (
                 <ErrorBox />
             ) : q.data?.slots.length ? (
-                <Card>
-                    <h2 className="mb-4 font-bold">{q.data.doctor.fullName}</h2>
-                    <Slots slots={q.data.slots} selected={selected} onSelect={setSelected} />
-                </Card>
+                <div className="space-y-5">
+                    {type === 'IN_PERSON' && (q.data as any).location ? (
+                        <Card>
+                            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                <div>
+                                    <p className="text-xs font-black uppercase tracking-wide text-slate-500">
+                                        Appointment building
+                                    </p>
+
+                                    <h2 className="mt-1 text-lg font-black dark:text-white">
+                                        {(q.data as any).location.name}
+                                    </h2>
+
+                                    <p className="mt-1 text-sm text-slate-500">
+                                        {addr((q.data as any).location.address)}
+                                    </p>
+                                </div>
+
+                                <LocationActions location={(q.data as any).location} />
+                            </div>
+
+                            <div className="mt-4">
+                                <LocationMiniMap location={(q.data as any).location} />
+                            </div>
+                        </Card>
+                    ) : null}
+
+                    <Card>
+                        <h2 className="mb-4 font-bold">{q.data.doctor.fullName}</h2>
+                        <Slots slots={q.data.slots} selected={selected} onSelect={setSelected} />
+                    </Card>
+                </div>
             ) : (
                 <Empty text={t('slots.none')} />
             )}
@@ -1105,7 +1472,7 @@ export function Book() {
     )
     const [selected, setSelected] = useState<DoctorSlot | null>(
         sp.get('startTime') && sp.get('endTime') && hospitalDoctorId
-            ? {
+            ? ({
                 date,
                 dayOfWeek: '',
                 startTime: sp.get('startTime')!,
@@ -1114,7 +1481,7 @@ export function Book() {
                 hospitalDoctorId,
                 doctorId: '',
                 hospitalId: '',
-            }
+            } as DoctorSlot)
             : null
     )
     const [reason, setReason] = useState('')
@@ -1191,6 +1558,26 @@ export function Book() {
                             ? `${selected.date} · ${selected.startTime}-${selected.endTime}`
                             : t('slots.selectFirst')}
                     </p>
+
+                    {type === 'IN_PERSON' && (selected as any)?.location ? (
+                        <div className="mt-4 rounded-3xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-500/30 dark:bg-emerald-500/10">
+                            <p className="text-xs font-black uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+                                Visit location
+                            </p>
+
+                            <p className="mt-1 font-bold dark:text-white">
+                                {(selected as any).location.name}
+                            </p>
+
+                            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                                {addr((selected as any).location.address)}
+                            </p>
+
+                            <div className="mt-3">
+                                <LocationActions location={(selected as any).location} />
+                            </div>
+                        </div>
+                    ) : null}
 
                     <Textarea
                         className="mt-4"
@@ -1367,6 +1754,8 @@ export function AppointmentDetail() {
                     </dl>
 
                     {err ? <p className="mt-4 text-rose-600">{err}</p> : null}
+
+                    <AppointmentLocationPanel appointment={a} />
 
                     {a.appointmentType === 'TELECONSULT' ? (
                         <div className="mt-6 rounded-3xl border border-sky-200 bg-sky-50 p-5 dark:border-sky-500/30 dark:bg-sky-500/10">

@@ -14,6 +14,9 @@ import { hospitalReviewsRouter } from './routes/hospital-reviews.routes'
 import { hospitalChatsRouter } from './routes/hospital-chats.routes'
 import { doctorChatsRouter } from './routes/doctor-chats.routes'
 import { doctorRouter } from './routes/doctor.routes'
+import { hospitalLocationsRouter } from './routes/hospital-locations.routes'
+import { hospitalDoctorLocationsRouter } from './routes/hospital-doctor-locations.routes'
+
 
 import { hospitalTeleconsultRouter } from './routes/hospital-teleconsult.routes'
 import { doctorTeleconsultRouter } from './routes/doctor-teleconsult.routes'
@@ -47,7 +50,7 @@ app.get('/health', (_req, res) => {
  */
 app.use('/hospital/auth', hospitalAuthRouter)
 app.use('/hospital/doctor-auth', doctorAuthRouter)
-
+app.use('/hospital', hospitalDoctorLocationsRouter)
 /**
  * Doctor-scoped routes.
  * These must stay BEFORE the broader /hospital/doctor router.
@@ -88,6 +91,7 @@ app.use('/hospital', hospitalProfileRouter)
 app.use('/hospital', hospitalDoctorAvailabilityRouter)
 app.use('/hospital', hospitalEncountersRouter)
 app.use('/hospital', hospitalMedicalDocumentsRouter)
+app.use('/hospital', hospitalLocationsRouter)
 app.use('/hospital', hospitalRouter)
 
 const port = process.env.PORT || 4002

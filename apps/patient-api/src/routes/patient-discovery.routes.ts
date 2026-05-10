@@ -138,6 +138,33 @@ async function getDoctorRatingStats({
   }
 }
 
+const hospitalLocationInclude = {
+  address: true,
+  departments: {
+    where: {
+      deletedAt: null,
+    },
+    orderBy: {
+      name: 'asc' as const,
+    },
+  },
+  doctors: {
+    where: {
+      isActive: true,
+      doctor: {
+        deletedAt: null,
+      },
+    },
+    include: {
+      doctor: true,
+      department: true,
+    },
+    orderBy: {
+      createdAt: 'desc' as const,
+    },
+  },
+}
+
 patientDiscoveryRouter.get('/hospitals', async (_req, res) => {
   try {
     const hospitals = await prisma.hospital.findMany({
@@ -147,9 +174,31 @@ patientDiscoveryRouter.get('/hospitals', async (_req, res) => {
       },
       include: {
         address: true,
+        locations: {
+          where: {
+            deletedAt: null,
+            isActive: true,
+          },
+          include: hospitalLocationInclude,
+          orderBy: [
+            {
+              isMain: 'desc',
+            },
+            {
+              name: 'asc',
+            },
+          ],
+        },
         departments: {
           where: {
             deletedAt: null,
+          },
+          include: {
+            location: {
+              include: {
+                address: true,
+              },
+            },
           },
           orderBy: {
             name: 'asc',
@@ -186,6 +235,62 @@ patientDiscoveryRouter.get('/hospitals', async (_req, res) => {
   }
 })
 
+patientDiscoveryRouter.get('/hospitals/:hospitalId/locations', async (req, res) => {
+  try {
+    const hospital = await prisma.hospital.findFirst({
+      where: {
+        id: req.params.hospitalId,
+        status: HospitalStatus.APPROVED,
+        deletedAt: null,
+      },
+      include: {
+        address: true,
+      },
+    })
+
+    if (!hospital) {
+      return res.status(404).json({
+        message: 'Hospital not found or not available.',
+      })
+    }
+
+    const locations = await prisma.hospitalLocation.findMany({
+      where: {
+        hospitalId: hospital.id,
+        deletedAt: null,
+        isActive: true,
+      },
+      include: hospitalLocationInclude,
+      orderBy: [
+        {
+          isMain: 'desc',
+        },
+        {
+          name: 'asc',
+        },
+      ],
+    })
+
+    const rating = await getHospitalRatingStats(hospital.id)
+
+    return res.json({
+      hospital: {
+        ...hospital,
+        averageRating: rating.averageRating,
+        reviewCount: rating.reviewCount,
+        rating,
+      },
+      locations,
+    })
+  } catch (error) {
+    console.error('Patient list hospital locations error:', error)
+
+    return res.status(500).json({
+      message: 'Something went wrong.',
+    })
+  }
+})
+
 patientDiscoveryRouter.get('/hospitals/:hospitalId/doctors', async (req, res) => {
   try {
     const hospital = await prisma.hospital.findFirst({
@@ -193,6 +298,24 @@ patientDiscoveryRouter.get('/hospitals/:hospitalId/doctors', async (req, res) =>
         id: req.params.hospitalId,
         status: HospitalStatus.APPROVED,
         deletedAt: null,
+      },
+      include: {
+        address: true,
+        locations: {
+          where: {
+            deletedAt: null,
+            isActive: true,
+          },
+          include: hospitalLocationInclude,
+          orderBy: [
+            {
+              isMain: 'desc',
+            },
+            {
+              name: 'asc',
+            },
+          ],
+        },
       },
     })
 
@@ -212,7 +335,20 @@ patientDiscoveryRouter.get('/hospitals/:hospitalId/doctors', async (req, res) =>
       },
       include: {
         doctor: true,
-        department: true,
+        department: {
+          include: {
+            location: {
+              include: {
+                address: true,
+              },
+            },
+          },
+        },
+        location: {
+          include: {
+            address: true,
+          },
+        },
         availabilities: {
           where: {
             isActive: true,
@@ -243,8 +379,12 @@ patientDiscoveryRouter.get('/hospitals/:hospitalId/doctors', async (req, res) =>
           hospitalDoctorId: hospitalDoctor.id,
         })
 
+        const effectiveLocation =
+          hospitalDoctor.location ?? hospitalDoctor.department?.location ?? null
+
         return {
           ...hospitalDoctor,
+          effectiveLocation,
           averageRating: rating.averageRating,
           reviewCount: rating.reviewCount,
           wouldRecommendCount: rating.wouldRecommendCount,
@@ -315,7 +455,20 @@ patientDiscoveryRouter.get(
         include: {
           hospital: true,
           doctor: true,
-          department: true,
+          department: {
+            include: {
+              location: {
+                include: {
+                  address: true,
+                },
+              },
+            },
+          },
+          location: {
+            include: {
+              address: true,
+            },
+          },
         },
       })
 
@@ -324,6 +477,12 @@ patientDiscoveryRouter.get(
           message: 'Doctor not found or not available.',
         })
       }
+
+      const effectiveLocation =
+        hospitalDoctor.location ?? hospitalDoctor.department?.location ?? null
+
+      const effectiveLocationId =
+        hospitalDoctor.locationId ?? hospitalDoctor.department?.locationId ?? null
 
       const availabilities = await prisma.doctorAvailability.findMany({
         where: {
@@ -335,13 +494,13 @@ patientDiscoveryRouter.get(
             in:
               appointmentType === 'IN_PERSON'
                 ? [
-                  AvailabilityAppointmentType.IN_PERSON,
-                  AvailabilityAppointmentType.BOTH,
-                ]
+                    AvailabilityAppointmentType.IN_PERSON,
+                    AvailabilityAppointmentType.BOTH,
+                  ]
                 : [
-                  AvailabilityAppointmentType.TELECONSULT,
-                  AvailabilityAppointmentType.BOTH,
-                ],
+                    AvailabilityAppointmentType.TELECONSULT,
+                    AvailabilityAppointmentType.BOTH,
+                  ],
           },
         },
         orderBy: {
@@ -410,6 +569,8 @@ patientDiscoveryRouter.get(
             doctorId: hospitalDoctor.doctorId,
             hospitalId: hospitalDoctor.hospitalId,
             departmentId: hospitalDoctor.departmentId,
+            locationId: effectiveLocationId,
+            location: effectiveLocation,
           })
         }
 
@@ -431,6 +592,8 @@ patientDiscoveryRouter.get(
           fullName: hospitalDoctor.doctor.fullName,
           specialization: hospitalDoctor.doctor.specialization,
           consultationFee: hospitalDoctor.doctor.consultationFee,
+          location: effectiveLocation,
+          locationId: effectiveLocationId,
           averageRating: doctorRating.averageRating,
           reviewCount: doctorRating.reviewCount,
           wouldRecommendCount: doctorRating.wouldRecommendCount,
@@ -444,6 +607,8 @@ patientDiscoveryRouter.get(
           rating: hospitalRating,
         },
         department: hospitalDoctor.department,
+        location: effectiveLocation,
+        locationId: effectiveLocationId,
         date,
         dayOfWeek,
         slots,

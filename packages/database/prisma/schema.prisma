@@ -330,7 +330,7 @@ model UserRole {
 
 model Address {
   id String @id @default(uuid())
-
+  
   line1      String
   line2      String?
   city       String
@@ -342,6 +342,7 @@ model Address {
 
   patients  Patient[]
   hospitals Hospital[]
+  hospitalLocations HospitalLocation[]
 
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
@@ -403,6 +404,7 @@ model Hospital {
   doctors               HospitalDoctor[]
   staff                 OrgStaff[]
   appointments          Appointment[]
+  locations HospitalLocation[]
   encounters            Encounter[]
   medicalDocuments      MedicalDocument[]
   hospitalReviews       HospitalReview[]
@@ -429,6 +431,8 @@ model HospitalDepartment {
   doctors      HospitalDoctor[]
   appointments Appointment[]
   encounters   Encounter[]
+  locationId String?           @map("location_id")
+location   HospitalLocation? @relation(fields: [locationId], references: [id])
 
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
@@ -436,6 +440,7 @@ model HospitalDepartment {
 
   @@unique([hospitalId, name])
   @@map("hospital_departments")
+  @@index([locationId])
 }
 
 model Doctor {
@@ -479,6 +484,9 @@ model HospitalDoctor {
   doctor     Doctor              @relation(fields: [doctorId], references: [id], onDelete: Cascade)
   department HospitalDepartment? @relation(fields: [departmentId], references: [id])
 
+  locationId String?           @map("location_id")
+location   HospitalLocation? @relation(fields: [locationId], references: [id])
+
   availabilities        DoctorAvailability[]
   appointments          Appointment[]
   encounters            Encounter[]
@@ -492,6 +500,7 @@ model HospitalDoctor {
 
   @@unique([hospitalId, doctorId])
   @@map("hospital_doctors")
+  @@index([locationId])
 }
 
 model TeleconsultSession {
@@ -567,6 +576,10 @@ model Appointment {
   scheduledStart  DateTime        @map("scheduled_start")
   scheduledEnd    DateTime        @map("scheduled_end")
 
+  locationId String?           @map("location_id")
+  location   HospitalLocation? @relation(fields: [locationId], references: [id])
+
+
   status             AppointmentStatus @default(REQUESTED)
   reason             String?
   cancellationReason String?           @map("cancellation_reason")
@@ -594,6 +607,37 @@ model Appointment {
   @@index([hospitalDoctorId])
   @@index([scheduledStart, scheduledEnd])
   @@map("appointments")
+  @@index([locationId])
+}
+
+model HospitalLocation {
+  id          String   @id @default(uuid())
+
+  hospitalId  String   @map("hospital_id")
+  addressId   String?  @map("address_id")
+
+  name        String
+  description String?
+  phone       String?
+  email       String?
+
+  isMain      Boolean  @default(false) @map("is_main")
+  isActive    Boolean  @default(true) @map("is_active")
+
+  hospital    Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  address     Address? @relation(fields: [addressId], references: [id])
+
+  departments  HospitalDepartment[]
+  doctors      HospitalDoctor[]
+  appointments Appointment[]
+
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  @@index([hospitalId])
+  @@index([addressId])
+  @@map("hospital_locations")
 }
 
 model ChatThread {

@@ -47,8 +47,29 @@ const doctorAppointmentInclude = {
   },
   hospital: true,
   doctor: true,
-  department: true,
-  hospitalDoctor: true,
+  department: {
+    include: {
+      location: {
+        include: {
+          address: true,
+        },
+      },
+    },
+  },
+  location: {
+    include: {
+      address: true,
+    },
+  },
+  hospitalDoctor: {
+    include: {
+      location: {
+        include: {
+          address: true,
+        },
+      },
+    },
+  },
   encounter: true,
   medicalDocuments: true,
   hospitalReview: true,
@@ -273,7 +294,20 @@ doctorRouter.post(
           patient: true,
           hospital: true,
           doctor: true,
-          department: true,
+          department: {
+            include: {
+              location: {
+                include: {
+                  address: true,
+                },
+              },
+            },
+          },
+          location: {
+            include: {
+              address: true,
+            },
+          },
           teleconsultSession: true,
         },
       })
@@ -312,11 +346,27 @@ doctorRouter.post(
             followUpInstructions: parsed.data.followUpInstructions,
           },
           include: {
-            appointment: true,
+            appointment: {
+              include: {
+                location: {
+                  include: {
+                    address: true,
+                  },
+                },
+              },
+            },
             patient: true,
             hospital: true,
             doctor: true,
-            department: true,
+            department: {
+              include: {
+                location: {
+                  include: {
+                    address: true,
+                  },
+                },
+              },
+            },
           },
         })
 
@@ -392,12 +442,25 @@ doctorRouter.get('/patients/:patientId/records', async (req: AuthenticatedDoctor
         appointment: {
           include: {
             teleconsultSession: true,
+            location: {
+              include: {
+                address: true,
+              },
+            },
           },
         },
         patient: true,
         hospital: true,
         doctor: true,
-        department: true,
+        department: {
+          include: {
+            location: {
+              include: {
+                address: true,
+              },
+            },
+          },
+        },
       },
       orderBy: {
         createdAt: 'desc',
@@ -428,7 +491,20 @@ doctorRouter.get('/profile', async (req: AuthenticatedDoctorRequest, res) => {
       include: {
         doctor: true,
         hospital: true,
-        department: true,
+        department: {
+          include: {
+            location: {
+              include: {
+                address: true,
+              },
+            },
+          },
+        },
+        location: {
+          include: {
+            address: true,
+          },
+        },
         availabilities: {
           where: {
             deletedAt: null,
@@ -456,6 +532,7 @@ doctorRouter.get('/profile', async (req: AuthenticatedDoctorRequest, res) => {
       doctor: hospitalDoctor.doctor,
       hospital: hospitalDoctor.hospital,
       department: hospitalDoctor.department,
+      location: hospitalDoctor.location,
       availabilities: hospitalDoctor.availabilities,
     })
   } catch (error) {

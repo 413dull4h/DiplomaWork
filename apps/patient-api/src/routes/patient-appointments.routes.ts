@@ -73,8 +73,38 @@ const appointmentInclude = {
   patient: true,
   hospital: true,
   doctor: true,
-  department: true,
-  hospitalDoctor: true,
+  department: {
+    include: {
+      location: {
+        include: {
+          address: true,
+        },
+      },
+    },
+  },
+  location: {
+    include: {
+      address: true,
+    },
+  },
+  hospitalDoctor: {
+    include: {
+      location: {
+        include: {
+          address: true,
+        },
+      },
+      department: {
+        include: {
+          location: {
+            include: {
+              address: true,
+            },
+          },
+        },
+      },
+    },
+  },
   encounter: true,
   medicalDocuments: true,
   hospitalReview: true,
@@ -143,7 +173,20 @@ patientAppointmentsRouter.post(
         include: {
           hospital: true,
           doctor: true,
-          department: true,
+          department: {
+            include: {
+              location: {
+                include: {
+                  address: true,
+                },
+              },
+            },
+          },
+          location: {
+            include: {
+              address: true,
+            },
+          },
         },
       })
 
@@ -152,6 +195,9 @@ patientAppointmentsRouter.post(
           message: 'Doctor not found or not available.',
         })
       }
+
+      const locationId =
+        hospitalDoctor.locationId ?? hospitalDoctor.department?.locationId ?? null
 
       const allowedAvailabilityTypes =
         appointmentType === AppointmentType.IN_PERSON
@@ -238,6 +284,7 @@ patientAppointmentsRouter.post(
           hospitalDoctorId: hospitalDoctor.id,
           doctorId: hospitalDoctor.doctorId,
           departmentId: hospitalDoctor.departmentId,
+          locationId,
           appointmentType,
           scheduledDate,
           scheduledStart,
@@ -258,6 +305,8 @@ patientAppointmentsRouter.post(
             patientId,
             hospitalId: appointment.hospitalId,
             doctorId: appointment.doctorId,
+            departmentId: appointment.departmentId,
+            locationId: appointment.locationId,
             startTime,
             endTime,
             date,
@@ -283,6 +332,8 @@ patientAppointmentsRouter.post(
               patientId: appointment.patientId,
               hospitalId: appointment.hospitalId,
               doctorId: appointment.doctorId,
+              departmentId: appointment.departmentId,
+              locationId: appointment.locationId,
               appointmentType: appointment.appointmentType,
               scheduledStart: appointment.scheduledStart.toISOString(),
               scheduledEnd: appointment.scheduledEnd.toISOString(),
@@ -446,6 +497,8 @@ patientAppointmentsRouter.patch(
             patientId,
             hospitalId: appointment.hospitalId,
             doctorId: appointment.doctorId,
+            departmentId: appointment.departmentId,
+            locationId: appointment.locationId,
             reason: parsed.data.cancellationReason,
           },
         },
@@ -469,6 +522,8 @@ patientAppointmentsRouter.patch(
               patientId: appointment.patientId,
               hospitalId: appointment.hospitalId,
               doctorId: appointment.doctorId,
+              departmentId: appointment.departmentId,
+              locationId: appointment.locationId,
               cancellationReason: appointment.cancellationReason,
               scheduledStart: appointment.scheduledStart.toISOString(),
               scheduledEnd: appointment.scheduledEnd.toISOString(),
