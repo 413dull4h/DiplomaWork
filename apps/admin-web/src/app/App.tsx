@@ -19,31 +19,58 @@ import { AppointmentsPage } from '@/pages/admin/AppointmentsPage'
 import { AppointmentDetailsPage } from '@/pages/admin/AppointmentDetailsPage'
 import { SettingsPage } from '@/pages/admin/SettingsPage'
 import { AccountPage } from '@/pages/admin/AccountPage'
-import { ReviewsPage } from '../pages/admin/ReviewsPage'
+import { ReviewsPage } from '@/pages/admin/ReviewsPage'
+import {
+  AdminLabOrderDetailPage,
+  AdminLabReportDetailPage,
+  AdminLabsPage,
+} from '@/pages/admin/AdminLabsPage'
 
 export function App() {
-  return <Routes>
-    <Route path="/login" element={<LoginPage />} />
-    <Route path="/unauthorized" element={<UnauthorizedPage />} />
-    <Route element={<ProtectedRoute><AdminShell /></ProtectedRoute>}>
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      <Route path="/dashboard" element={<DashboardPage />} />
-      <Route path="/hospitals" element={<HospitalsPage />} />
-      <Route path="/hospitals/new" element={<CreateHospitalPage />} />
-      <Route path="/hospitals/:id" element={<HospitalDetailsPage />} />
-      <Route path="/hospitals/:id/create-admin" element={<CreateHospitalAdminPage />} />
-      <Route path="/users" element={<UsersPage />} />
-      <Route path="/users/:id" element={<UserDetailsPage />} />
-      <Route path="/patients" element={<PatientsPage />} />
-      <Route path="/patients/:id" element={<PatientDetailsPage />} />
-	<Route path="/reviews" element={<ReviewsPage />} />
-      <Route path="/audit-logs" element={<AuditLogsPage />} />
-      <Route path="/audit-logs/:id" element={<AuditLogDetailsPage />} />
-      <Route path="/appointments" element={<AppointmentsPage />} />
-      <Route path="/appointments/:id" element={<AppointmentDetailsPage />} />
-      <Route path="/settings" element={<SettingsPage />} />
-      <Route path="/account" element={<AccountPage />} />
-    </Route>
-    <Route path="*" element={<NotFoundPage />} />
-  </Routes>
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/unauthorized" element={<UnauthorizedPage />} />
+
+      <Route element={<ProtectedRoute><AdminShell /></ProtectedRoute>}>
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
+        <Route path="/dashboard" element={<DashboardPage />} />
+
+        <Route path="/hospitals" element={<HospitalsPage />} />
+        <Route path="/hospitals/new" element={<CreateHospitalPage />} />
+        <Route path="/hospitals/:id" element={<HospitalDetailsPage />} />
+        <Route
+          path="/hospitals/:id/create-admin"
+          element={<CreateHospitalAdminPage />}
+        />
+
+        <Route path="/users" element={<UsersPage />} />
+        <Route path="/users/:id" element={<UserDetailsPage />} />
+
+        <Route path="/patients" element={<PatientsPage />} />
+        <Route path="/patients/:id" element={<PatientDetailsPage />} />
+
+        <Route path="/appointments" element={<AppointmentsPage />} />
+        <Route path="/appointments/:id" element={<AppointmentDetailsPage />} />
+
+        <Route path="/labs" element={<AdminLabsPage />} />
+        <Route path="/labs/:labOrderId" element={<AdminLabOrderDetailPage />} />
+        <Route
+          path="/lab-reports/:reportId"
+          element={<AdminLabReportDetailPage />}
+        />
+
+        <Route path="/reviews" element={<ReviewsPage />} />
+
+        <Route path="/audit-logs" element={<AuditLogsPage />} />
+        <Route path="/audit-logs/:id" element={<AuditLogDetailsPage />} />
+
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/account" element={<AccountPage />} />
+      </Route>
+
+      <Route path="*" element={<NotFoundPage />} />
+    </Routes>
+  )
 }

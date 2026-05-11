@@ -3,6 +3,7 @@ import {
   Building2,
   CalendarDays,
   ClipboardList,
+  FlaskConical,
   LayoutDashboard,
   Settings,
   Star,
@@ -16,21 +17,87 @@ import { cn } from '@/utils/cn'
 import { Avatar } from '@/components/ui/Avatar'
 import { useAuthStore } from '@/store/authStore'
 
+const ADMIN_API_URL =
+  import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:4001'
+
+function getAdminImageUrl(path?: string | null) {
+  if (!path) return undefined
+
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return path
+  }
+
+  return `${ADMIN_API_URL}${path.startsWith('/') ? path : `/${path}`}`
+}
+
 const items = [
-  { to: '/dashboard', key: 'nav.dashboard', fallback: 'Dashboard', icon: LayoutDashboard },
-  { to: '/hospitals', key: 'nav.hospitals', fallback: 'Hospitals', icon: Building2 },
-  { to: '/users', key: 'nav.users', fallback: 'Users', icon: Users },
-  { to: '/patients', key: 'nav.patients', fallback: 'Patients', icon: HeartPulse },
-  { to: '/appointments', key: 'nav.appointments', fallback: 'Appointments', icon: CalendarDays },
-  { to: '/reviews', key: 'nav.reviews', fallback: 'Reviews', icon: Star },
-  { to: '/audit-logs', key: 'nav.auditLogs', fallback: 'Audit Logs', icon: ClipboardList },
-  { to: '/settings', key: 'nav.settings', fallback: 'Settings', icon: Settings },
-  { to: '/account', key: 'nav.account', fallback: 'Account', icon: UserCircle },
+  {
+    to: '/dashboard',
+    key: 'nav.dashboard',
+    fallback: 'Dashboard',
+    icon: LayoutDashboard,
+  },
+  {
+    to: '/hospitals',
+    key: 'nav.hospitals',
+    fallback: 'Hospitals',
+    icon: Building2,
+  },
+  {
+    to: '/users',
+    key: 'nav.users',
+    fallback: 'Users',
+    icon: Users,
+  },
+  {
+    to: '/patients',
+    key: 'nav.patients',
+    fallback: 'Patients',
+    icon: HeartPulse,
+  },
+  {
+    to: '/appointments',
+    key: 'nav.appointments',
+    fallback: 'Appointments',
+    icon: CalendarDays,
+  },
+  {
+    to: '/labs',
+    key: 'nav.labs',
+    fallback: 'Labs & Reports',
+    icon: FlaskConical,
+  },
+  {
+    to: '/reviews',
+    key: 'nav.reviews',
+    fallback: 'Reviews',
+    icon: Star,
+  },
+  {
+    to: '/audit-logs',
+    key: 'nav.auditLogs',
+    fallback: 'Audit Logs',
+    icon: ClipboardList,
+  },
+  {
+    to: '/settings',
+    key: 'nav.settings',
+    fallback: 'Settings',
+    icon: Settings,
+  },
+  {
+    to: '/account',
+    key: 'nav.account',
+    fallback: 'Account',
+    icon: UserCircle,
+  },
 ]
 
 export function Sidebar() {
   const { t } = useTranslation()
   const user = useAuthStore((state) => state.user)
+
+  const avatarUrl = getAdminImageUrl(user?.avatarUrl)
 
   return (
     <aside className="sticky top-0 hidden h-screen w-72 shrink-0 p-4 lg:block">
@@ -41,7 +108,9 @@ export function Sidebar() {
           </div>
 
           <div>
-            <p className="text-lg font-black tracking-tight">{t('app.name')}</p>
+            <p className="text-lg font-black tracking-tight">
+              {t('app.name')}
+            </p>
             <p className="text-xs text-muted">{t('app.tagline')}</p>
           </div>
         </div>
@@ -68,12 +137,13 @@ export function Sidebar() {
 
         <div className="mt-auto rounded-3xl border border-white/40 bg-white/50 p-3 dark:border-white/10 dark:bg-white/5">
           <div className="flex items-center gap-3">
-            <Avatar email={user?.email} imageUrl={user?.avatarUrl} size="md" />
+            <Avatar email={user?.email} imageUrl={avatarUrl} size="md" />
 
             <div className="min-w-0">
               <p className="truncate text-sm font-black text-foreground">
                 {user?.email || 'Admin'}
               </p>
+
               <p className="truncate text-xs text-muted">
                 {user?.primaryRole || 'PLATFORM_ADMIN'}
               </p>

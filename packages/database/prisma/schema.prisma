@@ -14,6 +14,15 @@ enum ChatThreadType {
   SUPPORT
 }
 
+enum LabDocumentType {
+  LICENSE
+  ACCREDITATION
+  TAX_DOCUMENT
+  OWNERSHIP_DOCUMENT
+  COMPLIANCE_CERTIFICATE
+  OTHER
+}
+
 enum ChatMessageSenderRole {
   PATIENT
   DOCTOR
@@ -59,10 +68,86 @@ enum UserStatus {
 enum RoleName {
   PATIENT
   DOCTOR
+  LAB_ADMIN
+  LAB_STAFF
+  LAB_TECHNICIAN
   HOSPITAL_ADMIN
   HOSPITAL_STAFF
   PLATFORM_ADMIN
   SUPER_ADMIN
+}
+
+enum LabStatus {
+  PENDING
+  APPROVED
+  SUSPENDED
+  REJECTED
+}
+
+enum LabType {
+  INTERNAL
+  INDEPENDENT
+  PARTNER
+}
+
+enum LabStaffRole {
+  LAB_ADMIN
+  LAB_TECHNICIAN
+  SAMPLE_COLLECTOR
+  REPORT_MANAGER
+}
+
+enum LabTestCategory {
+  PATHOLOGY
+  RADIOLOGY
+  CARDIOLOGY
+  MICROBIOLOGY
+  BIOCHEMISTRY
+  HEMATOLOGY
+  IMMUNOLOGY
+  GENERAL
+  OTHER
+}
+
+enum SampleType {
+  BLOOD
+  URINE
+  STOOL
+  SWAB
+  SPUTUM
+  TISSUE
+  IMAGING
+  ECG
+  OTHER
+}
+
+enum LabOrderSource {
+  DOCTOR
+  HOSPITAL
+  PATIENT_DIRECT
+}
+
+enum LabOrderStatus {
+  REQUESTED
+  ACCEPTED
+  REJECTED
+  SCHEDULED
+  SAMPLE_COLLECTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum SampleCollectionType {
+  IN_CENTER
+  HOME_COLLECTION
+}
+
+enum LabReportStatus {
+  DRAFT
+  FINAL
+  CORRECTED
+  CANCELLED
 }
 
 enum NotificationType {
@@ -148,8 +233,15 @@ model User {
   patient       Patient?
   doctor        Doctor?
   orgStaff      OrgStaff[]
+  labStaff      LabStaff[]
   auditLogs     AuditLog[]
   notifications Notification[]
+
+  requestedLabOrders LabOrder[]  @relation("LabOrderRequestedBy")
+  acceptedLabOrders  LabOrder[]  @relation("LabOrderAcceptedBy")
+  rejectedLabOrders  LabOrder[]  @relation("LabOrderRejectedBy")
+  uploadedLabReports LabReport[] @relation("LabReportUploadedBy")
+  uploadedLabDocuments LabDocument[] @relation("LabDocumentUploader")
 
   createdChatThreads           ChatThread[]           @relation("ChatThreadCreatedBy")
   sentChatMessages             ChatMessage[]          @relation("ChatMessageSender")
@@ -161,6 +253,34 @@ model User {
   deletedAt DateTime? @map("deleted_at")
 
   @@map("users")
+}
+
+model LabDocument {
+  id               String          @id @default(uuid())
+
+  labId            String          @map("lab_id")
+  uploadedByUserId String          @map("uploaded_by_user_id")
+
+  title            String
+  description      String?
+  type             LabDocumentType @default(OTHER)
+
+  fileName         String          @map("file_name")
+  originalName     String          @map("original_name")
+  mimeType         String          @map("mime_type")
+  sizeBytes        Int             @map("size_bytes")
+  fileUrl          String          @map("file_url")
+
+  lab              Lab             @relation(fields: [labId], references: [id], onDelete: Cascade)
+  uploadedBy       User            @relation("LabDocumentUploader", fields: [uploadedByUserId], references: [id])
+
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+  deletedAt        DateTime?       @map("deleted_at")
+
+  @@index([labId])
+  @@index([type])
+  @@map("lab_documents")
 }
 
 model HospitalReview {
@@ -330,7 +450,7 @@ model UserRole {
 
 model Address {
   id String @id @default(uuid())
-  
+
   line1      String
   line2      String?
   city       String
@@ -340,9 +460,10 @@ model Address {
   latitude   Float?
   longitude  Float?
 
-  patients  Patient[]
-  hospitals Hospital[]
+  patients          Patient[]
+  hospitals         Hospital[]
   hospitalLocations HospitalLocation[]
+  labs              Lab[]
 
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
@@ -378,6 +499,8 @@ model Patient {
   visitFeedbacks      PatientVisitFeedback[]
   chatThreads         ChatThread[]
   teleconsultSessions TeleconsultSession[]
+  labOrders           LabOrder[]
+  labReports          LabReport[]
 
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
@@ -404,7 +527,7 @@ model Hospital {
   doctors               HospitalDoctor[]
   staff                 OrgStaff[]
   appointments          Appointment[]
-  locations HospitalLocation[]
+  locations             HospitalLocation[]
   encounters            Encounter[]
   medicalDocuments      MedicalDocument[]
   hospitalReviews       HospitalReview[]
@@ -412,6 +535,9 @@ model Hospital {
   patientVisitFeedbacks PatientVisitFeedback[]
   chatThreads           ChatThread[]
   teleconsultSessions   TeleconsultSession[]
+  labs                  Lab[]
+  labOrders             LabOrder[]
+  labReports            LabReport[]
 
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
@@ -426,21 +552,21 @@ model HospitalDepartment {
   hospitalId  String  @map("hospital_id")
   name        String
   description String?
+  locationId  String? @map("location_id")
 
-  hospital     Hospital         @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  hospital     Hospital          @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  location     HospitalLocation? @relation(fields: [locationId], references: [id])
   doctors      HospitalDoctor[]
   appointments Appointment[]
   encounters   Encounter[]
-  locationId String?           @map("location_id")
-location   HospitalLocation? @relation(fields: [locationId], references: [id])
 
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
   @@unique([hospitalId, name])
-  @@map("hospital_departments")
   @@index([locationId])
+  @@map("hospital_departments")
 }
 
 model Doctor {
@@ -464,6 +590,8 @@ model Doctor {
   patientVisitFeedbacks PatientVisitFeedback[]
   chatThreads           ChatThread[]
   teleconsultSessions   TeleconsultSession[]
+  labOrders             LabOrder[]
+  labReports            LabReport[]
 
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
@@ -478,14 +606,13 @@ model HospitalDoctor {
   hospitalId   String  @map("hospital_id")
   doctorId     String  @map("doctor_id")
   departmentId String? @map("department_id")
+  locationId   String? @map("location_id")
   isActive     Boolean @default(true) @map("is_active")
 
   hospital   Hospital            @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
   doctor     Doctor              @relation(fields: [doctorId], references: [id], onDelete: Cascade)
   department HospitalDepartment? @relation(fields: [departmentId], references: [id])
-
-  locationId String?           @map("location_id")
-location   HospitalLocation? @relation(fields: [locationId], references: [id])
+  location   HospitalLocation?   @relation(fields: [locationId], references: [id])
 
   availabilities        DoctorAvailability[]
   appointments          Appointment[]
@@ -494,13 +621,15 @@ location   HospitalLocation? @relation(fields: [locationId], references: [id])
   patientVisitFeedbacks PatientVisitFeedback[]
   chatThreads           ChatThread[]
   teleconsultSessions   TeleconsultSession[]
+  labOrders             LabOrder[]
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
   @@unique([hospitalId, doctorId])
-  @@map("hospital_doctors")
   @@index([locationId])
+  @@map("hospital_doctors")
 }
 
 model TeleconsultSession {
@@ -570,15 +699,12 @@ model Appointment {
   hospitalDoctorId String  @map("hospital_doctor_id")
   doctorId         String  @map("doctor_id")
   departmentId     String? @map("department_id")
+  locationId       String? @map("location_id")
 
   appointmentType AppointmentType @map("appointment_type")
   scheduledDate   DateTime        @map("scheduled_date")
   scheduledStart  DateTime        @map("scheduled_start")
   scheduledEnd    DateTime        @map("scheduled_end")
-
-  locationId String?           @map("location_id")
-  location   HospitalLocation? @relation(fields: [locationId], references: [id])
-
 
   status             AppointmentStatus @default(REQUESTED)
   reason             String?
@@ -589,6 +715,7 @@ model Appointment {
   hospitalDoctor HospitalDoctor      @relation(fields: [hospitalDoctorId], references: [id])
   doctor         Doctor              @relation(fields: [doctorId], references: [id])
   department     HospitalDepartment? @relation(fields: [departmentId], references: [id])
+  location       HospitalLocation?   @relation(fields: [locationId], references: [id])
 
   encounter            Encounter?
   medicalDocuments     MedicalDocument[]
@@ -597,6 +724,8 @@ model Appointment {
   patientVisitFeedback PatientVisitFeedback?
   chatThread           ChatThread?
   teleconsultSession   TeleconsultSession?
+  labOrders            LabOrder[]
+  labReports           LabReport[]
 
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
@@ -606,34 +735,34 @@ model Appointment {
   @@index([hospitalId])
   @@index([hospitalDoctorId])
   @@index([scheduledStart, scheduledEnd])
-  @@map("appointments")
   @@index([locationId])
+  @@map("appointments")
 }
 
 model HospitalLocation {
-  id          String   @id @default(uuid())
+  id String @id @default(uuid())
 
-  hospitalId  String   @map("hospital_id")
-  addressId   String?  @map("address_id")
+  hospitalId String  @map("hospital_id")
+  addressId  String? @map("address_id")
 
   name        String
   description String?
   phone       String?
   email       String?
 
-  isMain      Boolean  @default(false) @map("is_main")
-  isActive    Boolean  @default(true) @map("is_active")
+  isMain   Boolean @default(false) @map("is_main")
+  isActive Boolean @default(true) @map("is_active")
 
-  hospital    Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
-  address     Address? @relation(fields: [addressId], references: [id])
+  hospital Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  address  Address? @relation(fields: [addressId], references: [id])
 
   departments  HospitalDepartment[]
   doctors      HospitalDoctor[]
   appointments Appointment[]
 
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-  deletedAt   DateTime? @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
   @@index([hospitalId])
   @@index([addressId])
@@ -728,6 +857,8 @@ model Encounter {
   department     HospitalDepartment? @relation(fields: [departmentId], references: [id])
 
   medicalDocuments MedicalDocument[]
+  labOrders        LabOrder[]
+  labReports       LabReport[]
 
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
@@ -738,6 +869,212 @@ model Encounter {
   @@index([doctorId])
   @@index([appointmentId])
   @@map("encounters")
+}
+
+model Lab {
+  id String @id @default(uuid())
+
+  hospitalId String? @map("hospital_id")
+  addressId  String? @map("address_id")
+
+  name          String
+  legalName     String?   @map("legal_name")
+  type          LabType   @default(INDEPENDENT)
+  status        LabStatus @default(PENDING)
+  contactPhone  String?   @map("contact_phone")
+  contactEmail  String?   @map("contact_email")
+  licenseNumber String?   @map("license_number")
+  accreditation String?
+  workingHours  String?   @map("working_hours")
+  description   String?
+  isActive      Boolean   @default(true) @map("is_active")
+
+  hospital Hospital? @relation(fields: [hospitalId], references: [id], onDelete: SetNull)
+  address  Address?  @relation(fields: [addressId], references: [id])
+
+  staff   LabStaff[]
+  tests   LabTest[]
+  orders  LabOrder[]
+  reports LabReport[]
+  documents LabDocument[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([hospitalId])
+  @@index([status])
+  @@index([type])
+  @@map("labs")
+}
+
+model LabStaff {
+  id String @id @default(uuid())
+
+  userId    String       @map("user_id")
+  labId     String       @map("lab_id")
+  staffRole LabStaffRole @map("staff_role")
+  isActive  Boolean      @default(true) @map("is_active")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lab  Lab  @relation(fields: [labId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@unique([userId, labId])
+  @@index([labId])
+  @@map("lab_staff")
+}
+
+model LabTest {
+  id String @id @default(uuid())
+
+  labId               String          @map("lab_id")
+  name                String
+  code                String
+  category            LabTestCategory @default(GENERAL)
+  sampleType          SampleType      @default(BLOOD)
+  price               Decimal?        @db.Decimal(10, 2)
+  turnaroundTimeHours Int?            @map("turnaround_time_hours")
+  patientInstructions String?         @map("patient_instructions")
+  description         String?
+  isActive            Boolean         @default(true) @map("is_active")
+
+  lab        Lab            @relation(fields: [labId], references: [id], onDelete: Cascade)
+  orderItems LabOrderItem[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@unique([labId, code])
+  @@index([labId])
+  @@index([category])
+  @@map("lab_tests")
+}
+
+model LabOrder {
+  id String @id @default(uuid())
+
+  labId            String  @map("lab_id")
+  patientId        String  @map("patient_id")
+  hospitalId       String? @map("hospital_id")
+  doctorId         String? @map("doctor_id")
+  hospitalDoctorId String? @map("hospital_doctor_id")
+  appointmentId    String? @map("appointment_id")
+  encounterId      String? @map("encounter_id")
+
+  source         LabOrderSource       @default(HOSPITAL)
+  status         LabOrderStatus       @default(REQUESTED)
+  collectionType SampleCollectionType @default(IN_CENTER) @map("collection_type")
+
+  requestedByUserId String? @map("requested_by_user_id")
+  acceptedByUserId  String? @map("accepted_by_user_id")
+  rejectedByUserId  String? @map("rejected_by_user_id")
+
+  reason            String?
+  clinicalNotes     String?   @map("clinical_notes")
+  rejectionReason   String?   @map("rejection_reason")
+  scheduledAt       DateTime? @map("scheduled_at")
+  sampleCollectedAt DateTime? @map("sample_collected_at")
+  completedAt       DateTime? @map("completed_at")
+
+  lab            Lab             @relation(fields: [labId], references: [id])
+  patient        Patient         @relation(fields: [patientId], references: [id])
+  hospital       Hospital?       @relation(fields: [hospitalId], references: [id])
+  doctor         Doctor?         @relation(fields: [doctorId], references: [id])
+  hospitalDoctor HospitalDoctor? @relation(fields: [hospitalDoctorId], references: [id])
+  appointment    Appointment?    @relation(fields: [appointmentId], references: [id])
+  encounter      Encounter?      @relation(fields: [encounterId], references: [id])
+
+  requestedBy User? @relation("LabOrderRequestedBy", fields: [requestedByUserId], references: [id], onDelete: SetNull)
+  acceptedBy  User? @relation("LabOrderAcceptedBy", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
+  rejectedBy  User? @relation("LabOrderRejectedBy", fields: [rejectedByUserId], references: [id], onDelete: SetNull)
+
+  items   LabOrderItem[]
+  reports LabReport[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([labId])
+  @@index([patientId])
+  @@index([hospitalId])
+  @@index([doctorId])
+  @@index([appointmentId])
+  @@index([status])
+  @@map("lab_orders")
+}
+
+model LabOrderItem {
+  id String @id @default(uuid())
+
+  labOrderId String @map("lab_order_id")
+  labTestId  String @map("lab_test_id")
+
+  testName String   @map("test_name")
+  testCode String?  @map("test_code")
+  price    Decimal? @db.Decimal(10, 2)
+
+  labOrder LabOrder @relation(fields: [labOrderId], references: [id], onDelete: Cascade)
+  labTest  LabTest  @relation(fields: [labTestId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([labOrderId])
+  @@index([labTestId])
+  @@map("lab_order_items")
+}
+
+model LabReport {
+  id String @id @default(uuid())
+
+  labOrderId       String  @map("lab_order_id")
+  labId            String  @map("lab_id")
+  patientId        String  @map("patient_id")
+  hospitalId       String? @map("hospital_id")
+  doctorId         String? @map("doctor_id")
+  appointmentId    String? @map("appointment_id")
+  encounterId      String? @map("encounter_id")
+  uploadedByUserId String? @map("uploaded_by_user_id")
+
+  title   String
+  summary String?
+  status  LabReportStatus @default(FINAL)
+
+  fileName     String? @map("file_name")
+  originalName String? @map("original_name")
+  mimeType     String? @map("mime_type")
+  sizeBytes    Int?    @map("size_bytes")
+  fileUrl      String? @map("file_url")
+  resultData   Json?   @map("result_data")
+
+  finalizedAt DateTime? @map("finalized_at")
+
+  labOrder    LabOrder     @relation(fields: [labOrderId], references: [id], onDelete: Cascade)
+  lab         Lab          @relation(fields: [labId], references: [id])
+  patient     Patient      @relation(fields: [patientId], references: [id])
+  hospital    Hospital?    @relation(fields: [hospitalId], references: [id])
+  doctor      Doctor?      @relation(fields: [doctorId], references: [id])
+  appointment Appointment? @relation(fields: [appointmentId], references: [id])
+  encounter   Encounter?   @relation(fields: [encounterId], references: [id])
+  uploadedBy  User?        @relation("LabReportUploadedBy", fields: [uploadedByUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([labOrderId])
+  @@index([labId])
+  @@index([patientId])
+  @@index([hospitalId])
+  @@index([doctorId])
+  @@index([status])
+  @@map("lab_reports")
 }
 
 model MedicalDocument {

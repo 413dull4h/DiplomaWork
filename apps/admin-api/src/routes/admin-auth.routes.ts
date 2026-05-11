@@ -15,6 +15,30 @@ const loginSchema = z.object({
   password: z.string().min(1),
 })
 
+function adminUserResponse(user: {
+  id: string
+  email: string
+  phone?: string | null
+  primaryRole: RoleName
+  status: UserStatus
+  avatarUrl?: string | null
+  lastLoginAt?: Date | null
+  createdAt?: Date
+  updatedAt?: Date
+}) {
+  return {
+    id: user.id,
+    email: user.email,
+    phone: user.phone ?? null,
+    primaryRole: user.primaryRole,
+    status: user.status,
+    avatarUrl: user.avatarUrl ?? null,
+    lastLoginAt: user.lastLoginAt ?? null,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+  }
+}
+
 adminAuthRouter.post('/login', async (req, res) => {
   try {
     const parsed = loginSchema.safeParse(req.body)
@@ -29,7 +53,9 @@ adminAuthRouter.post('/login', async (req, res) => {
     const { email, password } = parsed.data
 
     const user = await prisma.user.findUnique({
-      where: { email },
+      where: {
+        email,
+      },
       include: {
         userRoles: {
           include: {
@@ -75,7 +101,9 @@ adminAuthRouter.post('/login', async (req, res) => {
     }
 
     await prisma.user.update({
-      where: { id: user.id },
+      where: {
+        id: user.id,
+      },
       data: {
         lastLoginAt: new Date(),
       },
@@ -102,12 +130,7 @@ adminAuthRouter.post('/login', async (req, res) => {
     return res.json({
       message: 'Login successful.',
       token,
-      user: {
-        id: user.id,
-        email: user.email,
-        primaryRole: user.primaryRole,
-        status: user.status,
-      },
+      user: adminUserResponse(user),
     })
   } catch (error) {
     console.error('Admin login error:', error)
@@ -118,42 +141,56 @@ adminAuthRouter.post('/login', async (req, res) => {
   }
 })
 
-adminAuthRouter.get('/me', requireAdminAuth, async (req: AuthenticatedAdminRequest, res) => {
-  try {
-    if (!req.user) {
-      return res.status(401).json({
-        message: 'Unauthorized.',
+adminAuthRouter.get(
+  '/me',
+  requireAdminAuth,
+  async (req: AuthenticatedAdminRequest, res) => {
+    try {
+      const userId = req.user?.userId
+
+      if (!userId) {
+        return res.status(401).json({
+          message: 'Unauthorized.',
+        })
+      }
+
+      const user = await prisma.user.findUnique({
+        where: {
+          id: userId,
+        },
+      })
+
+      if (!user || user.deletedAt) {
+        return res.status(404).json({
+          message: 'User not found.',
+        })
+      }
+
+      if (user.status !== UserStatus.ACTIVE) {
+        return res.status(403).json({
+          message: 'Account is not active.',
+        })
+      }
+
+      const isAdmin =
+        user.primaryRole === RoleName.PLATFORM_ADMIN ||
+        user.primaryRole === RoleName.SUPER_ADMIN
+
+      if (!isAdmin) {
+        return res.status(403).json({
+          message: 'Admin access required.',
+        })
+      }
+
+      return res.json({
+        user: adminUserResponse(user),
+      })
+    } catch (error) {
+      console.error('Admin me error:', error)
+
+      return res.status(500).json({
+        message: 'Something went wrong.',
       })
     }
-
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.userId },
-      select: {
-        id: true,
-        email: true,
-        phone: true,
-        status: true,
-        primaryRole: true,
-        lastLoginAt: true,
-        createdAt: true,
-avatarUrl: true,
-      },
-    })
-
-    if (!user) {
-      return res.status(404).json({
-        message: 'User not found.',
-      })
-    }
-
-    return res.json({
-      user,
-    })
-  } catch (error) {
-    console.error('Admin me error:', error)
-
-    return res.status(500).json({
-      message: 'Something went wrong.',
-    })
   }
-})
+)

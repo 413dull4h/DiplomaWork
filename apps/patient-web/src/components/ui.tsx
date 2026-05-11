@@ -615,27 +615,25 @@ export function AppNav() {
   const links = [
     ['/app/dashboard', 'dashboard'],
     ['/app/profile', 'profile'],
-    ['/app/medical-basics', 'medicalBasics'],
     ['/app/hospitals', 'hospitals'],
+    ['/app/medical-basics', 'medical'],
     ['/app/appointments', 'appointments'],
+    ['/app/labs', 'labs'],
     ['/app/chats', 'chats'],
     ['/app/records', 'records'],
     ['/app/documents', 'documents'],
-    ['/app/settings', 'settings'],
-    ['/app/account', 'account'],
   ] as const
 
   const navFallback: Record<(typeof links)[number][1], string> = {
     dashboard: 'Dashboard',
     profile: 'Profile',
-    medicalBasics: 'Medical Basics',
     hospitals: 'Find Hospitals',
+    medical: 'Medical Basics',
     appointments: 'Appointments',
+    labs: 'Labs & Reports',
     chats: 'Chats',
     records: 'Medical Records',
     documents: 'Documents',
-    settings: 'Settings',
-    account: 'Account',
   }
 
   const logout = () => {

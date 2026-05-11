@@ -953,7 +953,25 @@ export function DoctorAvailabilityPage() {
   const create = useCreateDoctorAvailability(hospitalDoctorId)
   const update = useUpdateDoctorAvailability(hospitalDoctorId)
   const remove = useDeleteDoctorAvailability(hospitalDoctorId)
+
   const [editing, setEditing] = useState<DoctorAvailability | null>(null)
+
+  const [presetStartTime, setPresetStartTime] = useState('09:00')
+  const [presetEndTime, setPresetEndTime] = useState('17:00')
+  const [presetSlotDuration, setPresetSlotDuration] = useState(30)
+  const [presetAppointmentType, setPresetAppointmentType] =
+    useState<AvailabilityAppointmentType>('BOTH')
+  const [presetMessage, setPresetMessage] = useState('')
+  const [presetError, setPresetError] = useState('')
+  const [isApplyingPreset, setIsApplyingPreset] = useState(false)
+
+  const workingWeekDays: DayOfWeek[] = [
+    'MONDAY',
+    'TUESDAY',
+    'WEDNESDAY',
+    'THURSDAY',
+    'FRIDAY',
+  ]
 
   const schema = z
     .object({
@@ -973,9 +991,9 @@ export function DoctorAvailabilityPage() {
     defaultValues: {
       dayOfWeek: 'MONDAY',
       startTime: '09:00',
-      endTime: '13:00',
+      endTime: '17:00',
       slotDurationMinutes: 30,
-      appointmentType: 'IN_PERSON',
+      appointmentType: 'BOTH',
     },
   })
 
@@ -990,13 +1008,186 @@ export function DoctorAvailabilityPage() {
     })
   }
 
+  async function applyWorkingWeekPreset() {
+    try {
+      setPresetMessage('')
+      setPresetError('')
+
+      if (!hospitalDoctorId) {
+        setPresetError('Missing doctor ID.')
+        return
+      }
+
+      if (!timeOk(presetStartTime, presetEndTime)) {
+        setPresetError('End time must be after start time.')
+        return
+      }
+
+      if (presetSlotDuration < 5 || presetSlotDuration > 240) {
+        setPresetError('Slot duration must be between 5 and 240 minutes.')
+        return
+      }
+
+      const confirmed = window.confirm(
+        `Apply working week schedule?\n\nMonday-Friday\n${presetStartTime} - ${presetEndTime}\n${presetSlotDuration} minutes\n${presetAppointmentType}`
+      )
+
+      if (!confirmed) return
+
+      setIsApplyingPreset(true)
+
+      for (const dayOfWeek of workingWeekDays) {
+        await create.mutateAsync({
+          dayOfWeek,
+          startTime: presetStartTime,
+          endTime: presetEndTime,
+          slotDurationMinutes: presetSlotDuration,
+          appointmentType: presetAppointmentType,
+        })
+      }
+
+      await list.refetch()
+
+      setPresetMessage(
+        `Working week schedule added: Monday-Friday, ${presetStartTime}-${presetEndTime}, ${presetSlotDuration} min, ${presetAppointmentType}.`
+      )
+    } catch (error) {
+      setPresetError(
+        error instanceof Error
+          ? error.message
+          : 'Failed to apply working week schedule.'
+      )
+    } finally {
+      setIsApplyingPreset(false)
+    }
+  }
+
+  useEffect(() => {
+    function handleShortcut(event: KeyboardEvent) {
+      const isWorkingWeekShortcut =
+        event.altKey && event.shiftKey && event.key.toLowerCase() === 'w'
+
+      if (!isWorkingWeekShortcut) return
+
+      event.preventDefault()
+
+      if (create.isPending || update.isPending || isApplyingPreset) return
+
+      void applyWorkingWeekPreset()
+    }
+
+    window.addEventListener('keydown', handleShortcut)
+
+    return () => {
+      window.removeEventListener('keydown', handleShortcut)
+    }
+  }, [
+    create.isPending,
+    update.isPending,
+    isApplyingPreset,
+    hospitalDoctorId,
+    presetStartTime,
+    presetEndTime,
+    presetSlotDuration,
+    presetAppointmentType,
+  ])
+
   return (
     <div>
       <PageHeader
         title={t('availability.title')}
-        subtitle={t('availability.subtitle')}
+        subtitle="Manage doctor weekly availability. Use the working week shortcut to add Monday-Friday schedules fast."
         actions={<BackButton />}
       />
+
+      <GlassCard className="mb-5 border-cyan-200/70 bg-cyan-50/70 dark:border-cyan-900/40 dark:bg-cyan-950/20">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <div className="flex flex-wrap gap-2">
+              <StatusBadge value="SHORTCUT" />
+              <StatusBadge value="ALT + SHIFT + W" />
+            </div>
+
+            <h2 className="mt-3 text-xl font-black dark:text-white">
+              Quick Working Week Schedule
+            </h2>
+
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+              Adds Monday-Friday availability in one click using your selected
+              time, slot duration, and appointment type.
+            </p>
+          </div>
+
+          <Button
+            type="button"
+            disabled={isApplyingPreset || create.isPending}
+            onClick={() => void applyWorkingWeekPreset()}
+          >
+            {isApplyingPreset ? 'Applying...' : 'Apply Monday-Friday'}
+          </Button>
+        </div>
+
+        <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <Field label="Start time">
+            <Input
+              type="time"
+              value={presetStartTime}
+              onChange={(event) => setPresetStartTime(event.target.value)}
+            />
+          </Field>
+
+          <Field label="End time">
+            <Input
+              type="time"
+              value={presetEndTime}
+              onChange={(event) => setPresetEndTime(event.target.value)}
+            />
+          </Field>
+
+          <Field label="Slot duration">
+            <Select
+              value={String(presetSlotDuration)}
+              onChange={(event) =>
+                setPresetSlotDuration(Number(event.target.value))
+              }
+            >
+              <option value="10">10 minutes</option>
+              <option value="15">15 minutes</option>
+              <option value="20">20 minutes</option>
+              <option value="30">30 minutes</option>
+              <option value="45">45 minutes</option>
+              <option value="60">60 minutes</option>
+            </Select>
+          </Field>
+
+          <Field label="Appointment type">
+            <Select
+              value={presetAppointmentType}
+              onChange={(event) =>
+                setPresetAppointmentType(
+                  event.target.value as AvailabilityAppointmentType
+                )
+              }
+            >
+              <option value="BOTH">Both online & offline</option>
+              <option value="IN_PERSON">Offline only</option>
+              <option value="TELECONSULT">Online only</option>
+            </Select>
+          </Field>
+        </div>
+
+        {presetMessage ? (
+          <p className="mt-4 rounded-2xl bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+            {presetMessage}
+          </p>
+        ) : null}
+
+        {presetError ? (
+          <p className="mt-4 rounded-2xl bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-700 dark:text-red-300">
+            {presetError}
+          </p>
+        ) : null}
+      </GlassCard>
 
       <div className="grid gap-5 xl:grid-cols-[1fr_420px]">
         <div>
@@ -1010,7 +1201,7 @@ export function DoctorAvailabilityPage() {
                 <GlassCard key={rule.id}>
                   <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div>
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         <StatusBadge value={rule.dayOfWeek} />
                         <StatusBadge value={rule.appointmentType} />
                         <StatusBadge
@@ -1066,7 +1257,15 @@ export function DoctorAvailabilityPage() {
                 await create.mutateAsync(values)
               }
 
-              f.reset()
+              await list.refetch()
+
+              f.reset({
+                dayOfWeek: 'MONDAY',
+                startTime: '09:00',
+                endTime: '17:00',
+                slotDurationMinutes: 30,
+                appointmentType: 'BOTH',
+              })
             })}
           >
             <Field label={t('availability.dayOfWeek')}>
@@ -1093,16 +1292,21 @@ export function DoctorAvailabilityPage() {
             </div>
 
             <Field label={t('availability.slotDurationMinutes')}>
-              <Input type="number" {...f.register('slotDurationMinutes')} />
+              <Select {...f.register('slotDurationMinutes')}>
+                <option value="10">10 minutes</option>
+                <option value="15">15 minutes</option>
+                <option value="20">20 minutes</option>
+                <option value="30">30 minutes</option>
+                <option value="45">45 minutes</option>
+                <option value="60">60 minutes</option>
+              </Select>
             </Field>
 
             <Field label={t('availability.appointmentType')}>
               <Select {...f.register('appointmentType')}>
-                {types.map((type) => (
-                  <option key={type} value={type}>
-                    {t(`status.${type}`)}
-                  </option>
-                ))}
+                <option value="BOTH">Both online & offline</option>
+                <option value="IN_PERSON">Offline only</option>
+                <option value="TELECONSULT">Online only</option>
               </Select>
             </Field>
 
@@ -1110,7 +1314,7 @@ export function DoctorAvailabilityPage() {
               <Err e={create.error || update.error || remove.error} />
             ) : null}
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button disabled={create.isPending || update.isPending}>
                 {t('common.save')}
               </Button>
@@ -1119,7 +1323,16 @@ export function DoctorAvailabilityPage() {
                 <Button
                   type="button"
                   variant="secondary"
-                  onClick={() => setEditing(null)}
+                  onClick={() => {
+                    setEditing(null)
+                    f.reset({
+                      dayOfWeek: 'MONDAY',
+                      startTime: '09:00',
+                      endTime: '17:00',
+                      slotDurationMinutes: 30,
+                      appointmentType: 'BOTH',
+                    })
+                  }}
                 >
                   {t('common.cancel')}
                 </Button>
@@ -1131,7 +1344,6 @@ export function DoctorAvailabilityPage() {
     </div>
   )
 }
-
 export function AppointmentsPage() {
   const { t } = useTranslation()
   const [search, setSearch] = useState('')

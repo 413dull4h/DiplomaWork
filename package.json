@@ -6,10 +6,17 @@
     "db:generate": "pnpm --filter @careos/database prisma:generate",
     "db:migrate": "pnpm --filter @careos/database prisma:migrate",
     "db:seed": "pnpm --filter @careos/database prisma:seed",
-    "db:studio": "pnpm --filter @careos/database prisma:studio"
+    "db:studio": "pnpm --filter @careos/database prisma:studio",
+
+    "dev:apis": "concurrently -n admin-api,hospital-api,patient-api,lab-api -c blue,green,yellow,magenta \"pnpm --filter @careos/admin-api dev\" \"pnpm --filter @careos/hospital-api dev\" \"pnpm --filter @careos/patient-api dev\" \"pnpm --filter @careos/lab-api dev\"",
+
+    "dev:web": "concurrently -n admin-web,hospital-web,doctor-web,patient-web,lab-web -c blue,green,cyan,yellow,magenta \"pnpm --filter @careos/admin-web dev\" \"pnpm --filter @careos/hospital-web dev\" \"pnpm --filter @careos/doctor-web dev\" \"pnpm --filter @careos/patient-web dev\" \"pnpm --filter @careos/lab-web dev\"",
+
+    "dev:all": "concurrently -n admin-api,hospital-api,patient-api,lab-api,admin-web,hospital-web,doctor-web,patient-web,lab-web -c blue,green,yellow,magenta,cyan,white,gray,red,brightMagenta \"pnpm --filter @careos/admin-api dev\" \"pnpm --filter @careos/hospital-api dev\" \"pnpm --filter @careos/patient-api dev\" \"pnpm --filter @careos/lab-api dev\" \"pnpm --filter @careos/admin-web dev\" \"pnpm --filter @careos/hospital-web dev\" \"pnpm --filter @careos/doctor-web dev\" \"pnpm --filter @careos/patient-web dev\" \"pnpm --filter @careos/lab-web dev\""
   },
   "devDependencies": {
     "@types/node": "latest",
+    "concurrently": "latest",
     "tsx": "latest",
     "typescript": "latest"
   }

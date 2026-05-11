@@ -6,6 +6,12 @@ import {
   Routes,
 } from 'react-router-dom'
 
+import {
+  PatientLabOrderDetailPage,
+  PatientLabReportDetailPage,
+  PatientLabsPage,
+} from '../pages/PatientLabsPage'
+
 import { usePatientAuthStore } from '../store/authStore'
 import { ProtectedRoute } from '../routes/ProtectedRoute'
 import { PatientShell } from '../layouts/PatientShell'
@@ -81,6 +87,16 @@ export function App() {
 
             <Route path="appointments" element={<Appointments />} />
             <Route path="appointments/:id" element={<AppointmentDetail />} />
+
+            <Route path="labs" element={<PatientLabsPage />} />
+            <Route
+              path="labs/:labOrderId"
+              element={<PatientLabOrderDetailPage />}
+            />
+            <Route
+              path="lab-reports/:reportId"
+              element={<PatientLabReportDetailPage />}
+            />
 
             <Route path="chats" element={<ChatsPage />} />
             <Route path="chats/:threadId" element={<ChatDetailPage />} />

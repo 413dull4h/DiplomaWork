@@ -5,6 +5,7 @@ import {
   Building2,
   CalendarDays,
   ClipboardList,
+  FlaskConical,
   HeartPulse,
   LayoutDashboard,
   LogOut,
@@ -77,6 +78,7 @@ const groups = [
       ['/departments', 'nav.departments', ClipboardList],
       ['/doctors', 'nav.doctors', Stethoscope],
       ['/appointments', 'nav.appointments', CalendarDays],
+      ['/labs', 'nav.labs', FlaskConical],
       ['/chats', 'nav.chats', MessageCircle],
       ['/reviews', 'nav.reviews', Star],
     ],
@@ -97,7 +99,6 @@ const groups = [
   },
 ] as const
 
-
 function getNavLabel(t: ReturnType<typeof useTranslation>['t'], key: string) {
   const fallback: Record<string, string> = {
     'nav.dashboard': 'Dashboard',
@@ -106,15 +107,37 @@ function getNavLabel(t: ReturnType<typeof useTranslation>['t'], key: string) {
     'nav.departments': 'Departments',
     'nav.doctors': 'Doctors',
     'nav.appointments': 'Appointments',
+    'nav.labs': 'Labs',
     'nav.chats': 'Chats',
     'nav.reviews': 'Reviews',
     'nav.encounters': 'Encounters',
     'nav.patientRecords': 'Patient Records',
     'nav.settings': 'Settings',
     'nav.account': 'Account',
+    'nav.logout': 'Logout',
+    'nav.openMenu': 'Open menu',
+    'nav.closeMenu': 'Close menu',
   }
 
   return t(key, { defaultValue: fallback[key] || key })
+}
+
+function isNavItemActive(pathname: string, to: string, key: string) {
+  if (to === '/dashboard') return pathname === to
+
+  if (key === 'nav.appointments') {
+    return pathname === '/appointments' || pathname.startsWith('/appointments/')
+  }
+
+  if (key === 'nav.encounters') {
+    return pathname.startsWith('/encounters')
+  }
+
+  if (key === 'nav.patientRecords') {
+    return pathname.startsWith('/patients/')
+  }
+
+  return pathname === to || pathname.startsWith(`${to}/`)
 }
 
 function NavItems({ onClick }: { onClick?: () => void }) {
@@ -132,10 +155,7 @@ function NavItems({ onClick }: { onClick?: () => void }) {
           </p>
 
           {group.items.map(([to, key, Icon]) => {
-            const active =
-              location.pathname === to ||
-              (to !== '/dashboard' && location.pathname.startsWith(to))
-
+            const active = isNavItemActive(location.pathname, to, key)
             const showUnread = key === 'nav.chats' && unreadChatCount > 0
 
             return (
@@ -221,14 +241,14 @@ export function HospitalShell() {
           className="mt-4 flex min-h-11 items-center gap-3 rounded-2xl px-3 text-sm font-bold text-rose-600 hover:bg-rose-500/10"
         >
           <LogOut className="h-4 w-4" />
-          {t('nav.logout')}
+          {t('nav.logout', { defaultValue: 'Logout' })}
         </button>
       </aside>
 
       <header className="sticky top-0 z-40 flex items-center gap-3 border-b border-white/50 bg-white/85 px-3 py-3 backdrop-blur-2xl dark:border-white/10 dark:bg-slate-950/85 lg:hidden">
         <Button
           variant="secondary"
-          aria-label={t('nav.openMenu')}
+          aria-label={t('nav.openMenu', { defaultValue: 'Open menu' })}
           onClick={() => setOpen(true)}
           className="shrink-0"
         >
@@ -246,7 +266,7 @@ export function HospitalShell() {
           <button
             type="button"
             className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
-            aria-label={t('nav.closeMenu')}
+            aria-label={t('nav.closeMenu', { defaultValue: 'Close menu' })}
             onClick={() => setOpen(false)}
           />
 
@@ -257,7 +277,7 @@ export function HospitalShell() {
               <Button
                 variant="secondary"
                 onClick={() => setOpen(false)}
-                aria-label={t('nav.closeMenu')}
+                aria-label={t('nav.closeMenu', { defaultValue: 'Close menu' })}
                 className="shrink-0"
               >
                 <X className="h-5 w-5" />
@@ -276,7 +296,7 @@ export function HospitalShell() {
 
             <Button className="mt-5 w-full" variant="danger" onClick={clearSession}>
               <LogOut className="h-4 w-4" />
-              {t('nav.logout')}
+              {t('nav.logout', { defaultValue: 'Logout' })}
             </Button>
           </aside>
         </div>

@@ -32,6 +32,11 @@ import {
   TeleconsultPage,
 } from '../pages/hospital/HospitalPages'
 import { LocationsPage } from '../pages/hospital/HospitalLocationsPage'
+import {
+  HospitalLabsPage,
+  HospitalLabCreatePage,
+  HospitalLabDetailsPage,
+} from '../pages/hospital/HospitalLabsPage'
 
 function AppRoutes() {
   const { isRestoring } = useHospitalSession()
@@ -96,6 +101,11 @@ function AppRoutes() {
         <Route path="chats/:threadId" element={<HospitalChatDetailPage />} />
 
         <Route path="teleconsult/:appointmentId" element={<TeleconsultPage />} />
+
+        {/* Lab Management */}
+        <Route path="labs" element={<HospitalLabsPage />} />
+        <Route path="labs/new" element={<HospitalLabCreatePage />} />
+        <Route path="labs/:id" element={<HospitalLabDetailsPage />} />
 
         <Route path="settings" element={<SettingsPage />} />
         <Route path="account" element={<AccountPage />} />
